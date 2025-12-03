@@ -819,7 +819,35 @@ async def crear_prospecto(
 
 
 
-
+@app.get("/prospectos/{prospecto_id}/editar")
+async def mostrar_editar_prospecto(
+    request: Request,
+    prospecto_id: int,
+    db: Session = Depends(database.get_db)
+):
+    user = await get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    # Buscar prospecto
+    prospecto = db.query(models.Prospecto).filter(models.Prospecto.id == prospecto_id).first()
+    if not prospecto:
+        return RedirectResponse(url="/prospectos?error=Prospecto no encontrado", status_code=303)
+    
+    # Verificar permisos: Agentes solo pueden editar sus propios prospectos
+    if (user.tipo_usuario == TipoUsuario.AGENTE.value and 
+        prospecto.agente_asignado_id != user.id):
+        return RedirectResponse(url="/prospectos?error=No tiene permisos para editar este prospecto", status_code=303)
+    
+    # Obtener medios de ingreso para el dropdown
+    medios_ingreso = db.query(models.MedioIngreso).all()
+    
+    return templates.TemplateResponse("editar_prospecto.html", {
+        "request": request,
+        "prospecto": prospecto,
+        "medios_ingreso": medios_ingreso,
+        "user": user
+    })
 
 
 @app.post("/prospectos/{prospecto_id}/editar")

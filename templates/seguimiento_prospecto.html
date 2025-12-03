@@ -249,23 +249,78 @@
             </div>
             <div class="card-body">
         <form method="post" action="/prospectos/{{ prospecto.id }}/actualizar-viaje">
+            <!-- Nombre y Apellido -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" name="nombre" 
+                            value="{{ prospecto.nombre or '' }}" placeholder="Nombre del cliente">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label">Apellido</label>
+                        <input type="text" class="form-control" name="apellido" 
+                            value="{{ prospecto.apellido or '' }}" placeholder="Apellido del cliente">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Email -->
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label class="form-label">Email</label>
                         <input type="email" class="form-control" name="correo_electronico" 
-                               value="{{ prospecto.correo_electronico or '' }}" placeholder="Email del cliente">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label class="form-label">Teléfono Secundario</label>
-                        <input type="text" class="form-control" name="telefono_secundario" 
-                               value="{{ prospecto.telefono_secundario or '' }}" placeholder="Teléfono adicional">
+                            value="{{ prospecto.correo_electronico or '' }}" placeholder="Email del cliente">
                     </div>
                 </div>
             </div>
             
+            <!-- Teléfonos - Fila 1: Teléfono Principal -->
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <label class="form-label">Indicativo Principal</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">+</span>
+                            <input type="text" class="form-control" name="indicativo_telefono" 
+                                value="{{ prospecto.indicativo_telefono or '57' }}" 
+                                placeholder="57" pattern="[0-9]{1,4}">
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <label class="form-label">Teléfono Principal</label>
+                        <input type="tel" class="form-control form-control-sm" name="telefono" 
+                            value="{{ prospecto.telefono or '' }}" placeholder="Ej: 3001234567">
+                    </div>
+                </div>
+                
+                <!-- Teléfono Secundario -->
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <label class="form-label">Indicativo Secundario</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">+</span>
+                            <input type="text" class="form-control" name="indicativo_telefono_secundario" 
+                                value="{{ prospecto.indicativo_telefono_secundario or '57' }}" 
+                                placeholder="57" pattern="[0-9]{1,4}">
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <label class="form-label">Teléfono Secundario</label>
+                        <input type="tel" class="form-control form-control-sm" name="telefono_secundario" 
+                            value="{{ prospecto.telefono_secundario or '' }}" placeholder="Teléfono adicional">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Origen y Destino -->
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
@@ -283,11 +338,12 @@
                 </div>
             </div>
             
+            <!-- Fechas -->
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label class="form-label">Fecha Ida (dd/mm/aaaa)</label>
-                        <input type="text" class="form-control" name="fecha_ida" 
+                        <input type="text" class="form-control datepicker" name="fecha_ida" 
                                value="{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%d/%m/%Y') }}{% endif %}" 
                                placeholder="dd/mm/aaaa">
                     </div>
@@ -295,37 +351,38 @@
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label class="form-label">Fecha Vuelta (dd/mm/aaaa)</label>
-                        <input type="text" class="form-control" name="fecha_vuelta" 
+                        <input type="text" class="form-control datepicker" name="fecha_vuelta" 
                                value="{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%d/%m/%Y') }}{% endif %}" 
                                placeholder="dd/mm/aaaa">
                     </div>
                 </div>
             </div>
             
+            <!-- Pasajeros -->
             <div class="row">
                 <div class="col-md-4">
                     <div class="mb-3">
                         <label class="form-label">Adultos</label>
                         <input type="number" class="form-control" name="pasajeros_adultos" 
-                               value="{{ prospecto.pasajeros_adultos }}" min="1">
+                               value="{{ prospecto.pasajeros_adultos or 1 }}" min="1">
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="mb-3">
                         <label class="form-label">Niños</label>
                         <input type="number" class="form-control" name="pasajeros_ninos" 
-                               value="{{ prospecto.pasajeros_ninos }}" min="0">
+                               value="{{ prospecto.pasajeros_ninos or 0 }}" min="0">
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="mb-3">
                         <label class="form-label">Infantes</label>
                         <input type="number" class="form-control" name="pasajeros_infantes" 
-                               value="{{ prospecto.pasajeros_infantes }}" min="0">
+                               value="{{ prospecto.pasajeros_infantes or 0 }}" min="0">
                     </div>
                 </div>
             </div>
-            
+                        
             <button type="submit" class="btn btn-warning">
                 <i class="fas fa-save"></i> Actualizar Información de Viaje
             </button>

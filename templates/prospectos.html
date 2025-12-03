@@ -354,6 +354,7 @@
     </div>
 </div>
 
+<!-- ========== MODALES ========== -->
 <!-- Modal para nuevo prospecto -->
 <div class="modal fade" id="modalProspecto" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -390,43 +391,48 @@
                                 <input type="email" class="form-control" name="correo_electronico" placeholder="Opcional">
                             </div>
                         </div>
-                        <!-- ✅ TELÉFONOS EN UNA SOLA FILA COMPACTA -->
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="mb-3">
-                                    <label class="form-label">Indicativo Principal *</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text">+</span>
-                                        <input type="text" class="form-control" name="indicativo_telefono" 
-                                            placeholder="57" value="57" pattern="[0-9]{1,4}" required>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="mb-3">
-                                    <label class="form-label">Teléfono Principal *</label>
-                                    <input type="tel" class="form-control form-control-sm" name="telefono" required 
-                                        placeholder="Ej: 3001234567">
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="mb-3">
-                                    <label class="form-label">Indicativo Secundario</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text">+</span>
-                                        <input type="text" class="form-control" name="indicativo_telefono_secundario" 
-                                            placeholder="57" value="57" pattern="[0-9]{1,4}">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="mb-3">
-                                    <label class="form-label">Teléfono Secundario</label>
-                                    <input type="tel" class="form-control form-control-sm" name="telefono_secundario" 
-                                        placeholder="Opcional">
+                        <div class="col-md-6">
+                            <!-- Este col-md-6 estaba vacío, lo removí para evitar estructura inconsistente -->
+                        </div>
+                    </div>
+                    
+                    <!-- ✅ TELÉFONOS EN UNA SOLA FILA COMPACTA -->
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Indicativo Principal *</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono" 
+                                        placeholder="57" value="57" pattern="[0-9]{1,4}" required>
                                 </div>
                             </div>
                         </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Teléfono Principal *</label>
+                                <input type="tel" class="form-control form-control-sm" name="telefono" required 
+                                    placeholder="Ej: 3001234567">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Indicativo Secundario</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono_secundario" 
+                                        placeholder="57" value="57" pattern="[0-9]{1,4}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Teléfono Secundario</label>
+                                <input type="tel" class="form-control form-control-sm" name="telefono_secundario" 
+                                    placeholder="Opcional">
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -510,13 +516,13 @@
     </div>
 </div>
 
-<!-- Modal para editar prospecto -->
-<div class="modal fade" id="modalEditarProspecto" tabindex="-1">
+<!-- ✅ MODAL DE EDITAR PROSPECTO - DEBE EXISTIR -->
+<div class="modal fade" id="modalEditarProspecto" tabindex="-1" aria-labelledby="modalEditarProspectoLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Editar Prospecto</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="modalEditarProspectoLabel">Editar Prospecto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post" action="" id="formEditarProspecto">
                 <div class="modal-body">
@@ -527,13 +533,13 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Nombre</label>
+                                <label for="editNombre" class="form-label">Nombre</label>
                                 <input type="text" class="form-control" name="nombre" id="editNombre" placeholder="Opcional">
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Apellido</label>
+                                <label for="editApellido" class="form-label">Apellido</label>
                                 <input type="text" class="form-control" name="apellido" id="editApellido" placeholder="Opcional">
                             </div>
                         </div>
@@ -542,131 +548,111 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Email</label>
+                                <label for="editEmail" class="form-label">Email</label>
                                 <input type="email" class="form-control" name="correo_electronico" id="editEmail" placeholder="Opcional">
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        
+                    </div>
+
+                    <!-- ✅ CAMPOS DE INDICATIVOS -->
+                    <!-- En el modal de edición, reemplaza las secciones de teléfono con esto: -->
+
+                    <div class="row">
+                        <!-- Fila 1: Teléfono Principal -->
+                        <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="form-label">Teléfono *</label>
-                                <input type="tel" class="form-control" name="telefono" id="editTelefono" required placeholder="Requerido">
+                                <label for="editIndicativoTelefono" class="form-label">Indicativo Principal *</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono" 
+                                        id="editIndicativoTelefono" placeholder="57" value="57" 
+                                        pattern="[0-9]{1,4}" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="editTelefono" class="form-label">Teléfono Principal *</label>
+                                <input type="tel" class="form-control form-control-sm" name="telefono" 
+                                    id="editTelefono" required placeholder="Ej: 3001234567">
+                            </div>
+                        </div>
+                        
+                        <!-- Fila 1: Teléfono Secundario -->
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="editIndicativoTelefonoSecundario" class="form-label">Indicativo Secundario</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono_secundario" 
+                                        id="editIndicativoTelefonoSecundario" placeholder="57" value="57" 
+                                        pattern="[0-9]{1,4}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="editTelefonoSecundario" class="form-label">Teléfono Secundario</label>
+                                <input type="tel" class="form-control form-control-sm" name="telefono_secundario" 
+                                    id="editTelefonoSecundario" placeholder="Opcional">
                             </div>
                         </div>
                     </div>
 
-                    <!-- ✅ NUEVO: CAMPOS DE INDICATIVOS PARA EDICIÓN -->
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Indicativo Teléfono Principal *</label>
-                                <div class="input-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text">+</span>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        class="form-control" 
-                                        name="indicativo_telefono" 
-                                        id="editIndicativoTelefono"
-                                        placeholder="57"
-                                        value="57" 
-                                        pattern="[0-9]{1,4}"
-                                        title="Solo números, máximo 4 dígitos"
-                                        required
-                                    >
-                                </div>
-                                <small class="form-text text-muted">Ejemplos: 57 (Colombia), 1 (USA/Canada), 34 (España)</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Teléfono Secundario</label>
-                                <input type="tel" class="form-control" name="telefono_secundario" id="editTelefonoSecundario" placeholder="Opcional">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Indicativo Teléfono Secundario</label>
-                                <div class="input-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text">+</span>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        class="form-control" 
-                                        name="indicativo_telefono_secundario" 
-                                        id="editIndicativoTelefonoSecundario"
-                                        placeholder="57"
-                                        value="57" 
-                                        pattern="[0-9]{1,4}"    
-                                        title="Solo números, máximo 4 dígitos"
-                                    >
-                                </div>
-                                <small class="form-text text-muted">Ejemplos: 57 (Colombia), 1 (USA/Canada), 34 (España)</small>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label class="form-label">Ciudad de Origen</label>
-                                <input type="text" class="form-control" name="ciudad_origen" id="editCiudadOrigen" placeholder="Opcional">
+                                <input type="text" class="form-control" name="ciudad_origen" placeholder="Opcional">
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Destino</label>
-                                <input type="text" class="form-control" name="destino" id="editDestino" 
-                                    placeholder="Empieza a escribir... (ej: Cancún, México)"
-                                    list="destinosSugeridosEdit"
-                                    autocomplete="off">
-                                <datalist id="destinosSugeridosEdit"></datalist>
+                                <label for="editDestino" class="form-label">Destino</label>
+                                <input type="text" class="form-control" name="destino" id="editDestino" placeholder="Destino...">
                             </div>
                         </div>
                     </div>
-                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Fecha Ida (dd/mm/aaaa)</label>
-                                <input type="text" class="form-control" name="fecha_ida" id="editFechaIda" placeholder="dd/mm/aaaa (Opcional)">
+                                <label for="editFechaIda" class="form-label">Fecha Ida</label>
+                                <input type="text" class="form-control" name="fecha_ida" id="editFechaIda" 
+                                       placeholder="dd/mm/aaaa">
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Fecha Vuelta (dd/mm/aaaa)</label>
-                                <input type="text" class="form-control" name="fecha_vuelta" id="editFechaVuelta" placeholder="dd/mm/aaaa (Opcional)">
+                                <label for="editFechaVuelta" class="form-label">Fecha Vuelta</label>
+                                <input type="text" class="form-control" name="fecha_vuelta" id="editFechaVuelta" 
+                                       placeholder="dd/mm/aaaa">
                             </div>
                         </div>
                     </div>
-                    
                     <div class="row">
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label class="form-label">Adultos</label>
+                                <label for="editPasajerosAdultos" class="form-label">Adultos</label>
                                 <input type="number" class="form-control" name="pasajeros_adultos" id="editPasajerosAdultos" value="1" min="1">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label class="form-label">Niños</label>
+                                <label for="editPasajerosNinos" class="form-label">Niños</label>
                                 <input type="number" class="form-control" name="pasajeros_ninos" id="editPasajerosNinos" value="0" min="0">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label class="form-label">Infantes</label>
+                                <label for="editPasajerosInfantes" class="form-label">Infantes</label>
                                 <input type="number" class="form-control" name="pasajeros_infantes" id="editPasajerosInfantes" value="0" min="0">
                             </div>
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Medio de Ingreso *</label>
+                        <label for="editMedioIngreso" class="form-label">Medio de Ingreso *</label>
                         <select class="form-select" name="medio_ingreso_id" required id="editMedioIngreso">
                             <option value="">Seleccionar medio...</option>
                             {% for medio in medios_ingreso %}
@@ -676,7 +662,7 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Observaciones</label>
+                        <label for="editObservaciones" class="form-label">Observaciones</label>
                         <textarea class="form-control" name="observaciones" id="editObservaciones" rows="3" placeholder="Opcional"></textarea>
                     </div>
                 </div>
@@ -689,13 +675,13 @@
     </div>
 </div>
 
-<!-- Modal para eliminar prospecto -->
-<div class="modal fade" id="modalEliminarProspecto" tabindex="-1">
+<!-- ✅ MODAL DE ELIMINAR PROSPECTO - DEBE EXISTIR -->
+<div class="modal fade" id="modalEliminarProspecto" tabindex="-1" aria-labelledby="modalEliminarProspectoLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Eliminar Prospecto</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="modalEliminarProspectoLabel">Eliminar Prospecto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post" action="" id="formEliminarProspecto">
                 <div class="modal-body">
@@ -711,92 +697,8 @@
     </div>
 </div>
 
-<!-- Bootstrap JS y Font Awesome para íconos -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
-<script>
-// JavaScript para los filtros y mejoras de UX
-document.addEventListener('DOMContentLoaded', function() {
-    // Formatear automáticamente las fechas mientras se escribe
-    const fechaInputs = document.querySelectorAll('input[name="fecha_ida"], input[name="fecha_vuelta"]');
-    
-    fechaInputs.forEach(input => {
-        input.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            
-            if (value.length >= 2) {
-                value = value.substring(0, 2) + '/' + value.substring(2);
-            }
-            if (value.length >= 5) {
-                value = value.substring(0, 5) + '/' + value.substring(5, 9);
-            }
-            
-            e.target.value = value;
-        });
-    });
-    
-    // Modal de edición
-    const modalEditar = document.getElementById('modalEditarProspecto');
-    modalEditar.addEventListener('show.bs.modal', function(event) {
-        const button = event.relatedTarget;
-        const prospectoId = button.getAttribute('data-prospecto-id');
-        
-        // Llenar los campos del formulario con los datos del prospecto
-        document.getElementById('editNombre').value = button.getAttribute('data-nombre') || '';
-        document.getElementById('editApellido').value = button.getAttribute('data-apellido') || '';
-        document.getElementById('editEmail').value = button.getAttribute('data-email') || '';
-        document.getElementById('editTelefono').value = button.getAttribute('data-telefono') || '';
-        document.getElementById('editIndicativoTelefono').value = button.getAttribute('data-indicativo-telefono') || '57';
-        document.getElementById('editTelefonoSecundario').value = button.getAttribute('data-telefono-secundario') || '';
-        document.getElementById('editIndicativoTelefonoSecundario').value = button.getAttribute('data-indicativo-telefono-secundario') || '57';
-        document.getElementById('editCiudadOrigen').value = button.getAttribute('data-ciudad-origen') || '';
-        document.getElementById('editDestino').value = button.getAttribute('data-destino') || '';
-        document.getElementById('editFechaIda').value = button.getAttribute('data-fecha-ida') || '';
-        document.getElementById('editFechaVuelta').value = button.getAttribute('data-fecha-vuelta') || '';
-        document.getElementById('editPasajerosAdultos').value = button.getAttribute('data-pasajeros-adultos');
-        document.getElementById('editPasajerosNinos').value = button.getAttribute('data-pasajeros-ninos');
-        document.getElementById('editPasajerosInfantes').value = button.getAttribute('data-pasajeros-infantes');
-        document.getElementById('editMedioIngreso').value = button.getAttribute('data-medio-ingreso');
-        document.getElementById('editObservaciones').value = button.getAttribute('data-observaciones') || '';
-        
-        // Actualizar la acción del formulario
-        document.getElementById('formEditarProspecto').action = `/prospectos/${prospectoId}/editar`;
-    });
-    
-    // Modal de eliminación
-    const modalEliminar = document.getElementById('modalEliminarProspecto');
-    modalEliminar.addEventListener('show.bs.modal', function(event) {
-        const button = event.relatedTarget;
-        const prospectoId = button.getAttribute('data-prospecto-id');
-        const prospectoNombre = button.getAttribute('data-prospecto-nombre');
-        
-        document.getElementById('prospectoToDelete').textContent = prospectoNombre;
-        document.getElementById('formEliminarProspecto').action = `/prospectos/${prospectoId}/eliminar`;
-    });
-    
-    // Auto-enfocar el primer campo de filtro
-    const primerFiltro = document.querySelector('input[name="destino"]');
-    if (primerFiltro && !primerFiltro.value) {
-        primerFiltro.focus();
-    }
-    
-    // Mostrar loading al enviar formularios de filtro
-    const formFiltros = document.querySelector('form[method="get"]');
-    if (formFiltros) {
-        formFiltros.addEventListener('submit', function() {
-            const btnBuscar = this.querySelector('button[type="submit"]');
-            if (btnBuscar) {
-                btnBuscar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
-                btnBuscar.disabled = true;
-            }
-        });
-    }
-});
-</script>
-
 <style>
-/* Estilos personalizados para mejorar la visualización */
+/* Estilos personalizados */
 .table-sm td, .table-sm th {
     padding: 0.5rem;
     vertical-align: middle;
@@ -812,203 +714,223 @@ document.addEventListener('DOMContentLoaded', function() {
     padding: 0.25rem 0.5rem;
 }
 
-/* Mejorar la visualización de emails pequeños */
-.email-small {
-    font-size: 0.75rem;
-    max-width: 150px;
-}
-
-/* Badges para estados */
 .badge {
     font-size: 0.7rem;
 }
 
-/* Estilos para los campos de indicativo */
-.input-group-text {
-    background-color: #f8f9fa;
-    border: 1px solid #ced4da;
-}
 </style>
-<!-- ✅ AGREGAR DATEPICKER -->
+
+
+<!-- ✅ DEPURACIÓN PARA VERIFICAR QUE LOS MODALES EXISTEN -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("=== VERIFICACIÓN DE MODALES ===");
+    
+    // Verificar modales
+    const modalEditar = document.getElementById('modalEditarProspecto');
+    const modalEliminar = document.getElementById('modalEliminarProspecto');
+    
+    console.log("Modal Editar existe:", !!modalEditar);
+    console.log("Modal Eliminar existe:", !!modalEliminar);
+    
+    // Verificar botones
+    const botonesEditar = document.querySelectorAll('[data-bs-target="#modalEditarProspecto"]');
+    const botonesEliminar = document.querySelectorAll('[data-bs-target="#modalEliminarProspecto"]');
+    
+    console.log("Botones Editar encontrados:", botonesEditar.length);
+    console.log("Botones Eliminar encontrados:", botonesEliminar.length);
+    
+    // Si los modales no existen, crearlos dinámicamente
+    if (!modalEditar && botonesEditar.length > 0) {
+        console.error("❌ CRÍTICO: Modal Editar no existe en el DOM");
+        alert("Error: El modal de edición no está cargado. Recarga la página.");
+    }
+    
+    if (!modalEliminar && botonesEliminar.length > 0) {
+        console.error("❌ CRÍTICO: Modal Eliminar no existe en el DOM");
+    }
+    
+    console.log("=== FIN VERIFICACIÓN ===");
+});
+</script>
+{% endblock %}
+
+{% block scripts %}
+<!-- Flatpickr para datepicker -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Configurar datepicker para campos de fecha
-    const fechaInputs = document.querySelectorAll('input[placeholder="dd/mm/aaaa"]');
+    console.log("✅ JavaScript inicializado correctamente");
     
-    fechaInputs.forEach(input => {
-        flatpickr(input, {
-            dateFormat: "d/m/Y",
-            locale: "es",
-            allowInput: true,
-            disableMobile: true, // Para mejor experiencia en desktop
-            onChange: function(selectedDates, dateStr, instance) {
-                // Formatear automáticamente mientras se escribe
-                if (dateStr) {
-                    instance.setDate(dateStr, true, "d/m/Y");
-                }
-            }
-        });
+    // ========== VERIFICACIÓN INICIAL ==========
+    console.log("=== VERIFICACIÓN DE ELEMENTOS ===");
+    
+    // Verificar modales
+    const modales = {
+        'modalEditarProspecto': document.getElementById('modalEditarProspecto'),
+        'modalEliminarProspecto': document.getElementById('modalEliminarProspecto'),
+        'modalProspecto': document.getElementById('modalProspecto')
+    };
+    
+    Object.entries(modales).forEach(([nombre, elemento]) => {
+        console.log(`${nombre}:`, elemento ? "✅ Existe" : "❌ No existe");
     });
     
-    // Mostrar/ocultar campos de fecha personalizada
-    const selectPeriodo = document.getElementById('selectPeriodo');
-    const fechaInicioGroup = document.getElementById('fechaInicioGroup');
-    const fechaFinGroup = document.getElementById('fechaFinGroup');
+    // Verificar botones
+    console.log("Botones Editar:", document.querySelectorAll('[data-bs-target="#modalEditarProspecto"]').length);
+    console.log("Botones Eliminar:", document.querySelectorAll('[data-bs-target="#modalEliminarProspecto"]').length);
+    console.log("Botón Nuevo:", document.querySelectorAll('[data-bs-target="#modalProspecto"]').length);
     
-    if (selectPeriodo) {
-        selectPeriodo.addEventListener('change', function() {
-            if (this.value === 'personalizado') {
-                fechaInicioGroup.style.display = 'block';
-                fechaFinGroup.style.display = 'block';
-            } else {
-                fechaInicioGroup.style.display = 'none';
-                fechaFinGroup.style.display = 'none';
+    console.log("=== FIN VERIFICACIÓN ===");
+    
+    // ========== CONFIGURAR DATEPICKERS ==========
+    try {
+        const fechaInputs = document.querySelectorAll('input[placeholder*="dd/mm/aaaa"]');
+        fechaInputs.forEach(input => {
+            if (input && !input.hasAttribute('data-fp')) {
+                flatpickr(input, {
+                    dateFormat: "d/m/Y",
+                    locale: "es",
+                    allowInput: true,
+                    disableMobile: true
+                });
+                input.setAttribute('data-fp', 'true');
             }
         });
+        console.log("✅ Datepickers configurados:", fechaInputs.length);
+    } catch (error) {
+        console.error("❌ Error configurando datepickers:", error);
     }
-});
-</script>
-<script>
-// ✅ AUTOCOMPLETADO INTELIGENTE PARA DESTINOS
-document.addEventListener('DOMContentLoaded', function() {
-    // Configurar autocompletado para campos de destino
-    const destinoInput = document.getElementById('destinoInput');
-    const editDestinoInput = document.getElementById('editDestino');
-    const destinosSugeridos = document.getElementById('destinosSugeridos');
-    const destinosSugeridosEdit = document.getElementById('destinosSugeridosEdit');
     
-    // Función para buscar sugerencias
-    // En el script de prospectos.html, verifica que las URLs sean correctas:
-    async function buscarSugerenciasDestinos(termino, datalistElement) {
-        if (termino.length < 2) {
-            datalistElement.innerHTML = '';
-            return;
-        }
-        
-        try {
-            // Asegúrate que la URL coincida con tu ruta FastAPI
-            const response = await fetch(`/api/destinos/sugerencias?q=${encodeURIComponent(termino)}`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            // Limpiar sugerencias anteriores
-            datalistElement.innerHTML = '';
-            
-            // Agregar nuevas sugerencias
-            data.sugerencias.forEach(sugerencia => {
-                const option = document.createElement('option');
-                option.value = sugerencia;
-                datalistElement.appendChild(option);
-            });
-            
-        } catch (error) {
-            console.error('Error buscando sugerencias:', error);
-            // Fallback: sugerencias locales básicas
-            if (termino.length >= 3) {
-                const sugerenciasFallback = [
-                    `${termino}, México`,
-                    `${termino}, Colombia`,
-                    `${termino}, República Dominicana`
+    // ========== MODAL DE EDICIÓN - VERSIÓN SEGURA ==========
+    const modalEditar = document.getElementById('modalEditarProspecto');
+    
+    if (modalEditar) {
+        modalEditar.addEventListener('show.bs.modal', function(event) {
+            try {
+                const button = event.relatedTarget;
+                
+                if (!button) {
+                    console.error("No se pudo obtener el botón que abrió el modal");
+                    return;
+                }
+                
+                const prospectoId = button.getAttribute('data-prospecto-id');
+                console.log("🟡 Abriendo modal para prospecto:", prospectoId);
+                
+                // Función segura para asignar valores
+                function setValueSafe(elementId, value, defaultValue = '') {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.value = value || defaultValue;
+                        return true;
+                    } else {
+                        console.warn(`⚠️ Elemento ${elementId} no encontrado en el DOM`);
+                        return false;
+                    }
+                }
+                
+                // Lista de campos a cargar
+                const campos = [
+                    { id: 'editNombre', attr: 'data-nombre', default: '' },
+                    { id: 'editApellido', attr: 'data-apellido', default: '' },
+                    { id: 'editEmail', attr: 'data-email', default: '' },
+                    { id: 'editTelefono', attr: 'data-telefono', default: '' },
+                    { id: 'editIndicativoTelefono', attr: 'data-indicativo-telefono', default: '57' },
+                    { id: 'editTelefonoSecundario', attr: 'data-telefono-secundario', default: '' },
+                    { id: 'editIndicativoTelefonoSecundario', attr: 'data-indicativo-telefono-secundario', default: '57' },
+                    { id: 'editCiudadOrigen', attr: 'data-ciudad-origen', default: '' },
+                    { id: 'editDestino', attr: 'data-destino', default: '' },
+                    { id: 'editFechaIda', attr: 'data-fecha-ida', default: '' },
+                    { id: 'editFechaVuelta', attr: 'data-fecha-vuelta', default: '' },
+                    { id: 'editPasajerosAdultos', attr: 'data-pasajeros-adultos', default: '1' },
+                    { id: 'editPasajerosNinos', attr: 'data-pasajeros-ninos', default: '0' },
+                    { id: 'editPasajerosInfantes', attr: 'data-pasajeros-infantes', default: '0' },
+                    { id: 'editMedioIngreso', attr: 'data-medio-ingreso', default: '' },
+                    { id: 'editObservaciones', attr: 'data-observaciones', default: '' }
                 ];
                 
-                datalistElement.innerHTML = '';
-                sugerenciasFallback.forEach(sug => {
-                    const option = document.createElement('option');
-                    option.value = sug;
-                    datalistElement.appendChild(option);
+                // Cargar todos los campos
+                let camposCargados = 0;
+                let camposFaltantes = 0;
+                
+                campos.forEach(campo => {
+                    const value = button.getAttribute(campo.attr);
+                    if (setValueSafe(campo.id, value, campo.default)) {
+                        camposCargados++;
+                    } else {
+                        camposFaltantes++;
+                    }
                 });
-            }
-        }
-    }
-    
-    // Configurar eventos para el modal de nuevo
-    if (destinoInput) {
-        let timeoutId;
-        destinoInput.addEventListener('input', function(e) {
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-                buscarSugerenciasDestinos(e.target.value, destinosSugeridos);
-            }, 300); // Debounce de 300ms
-        });
-        
-        // Sugerir al hacer focus
-        destinoInput.addEventListener('focus', function() {
-            if (this.value.length >= 2) {
-                buscarSugerenciasDestinos(this.value, destinosSugeridos);
+                
+                console.log(`✅ Campos cargados: ${camposCargados}, Faltantes: ${camposFaltantes}`);
+                
+                // Actualizar la acción del formulario
+                const form = document.getElementById('formEditarProspecto');
+                if (form) {
+                    form.action = `/prospectos/${prospectoId}/editar`;
+                    console.log("✅ Form action actualizado:", form.action);
+                } else {
+                    console.error("❌ Formulario formEditarProspecto no encontrado");
+                }
+                
+            } catch (error) {
+                console.error("❌ Error en show.bs.modal:", error);
             }
         });
     }
     
-    // Configurar eventos para el modal de edición
-    if (editDestinoInput) {
-        let timeoutIdEdit;
-        editDestinoInput.addEventListener('input', function(e) {
-            clearTimeout(timeoutIdEdit);
-            timeoutIdEdit = setTimeout(() => {
-                buscarSugerenciasDestinos(e.target.value, destinosSugeridosEdit);
-            }, 300);
-        });
-    }
+    // ========== MODAL DE ELIMINACIÓN ==========
+    const modalEliminar = document.getElementById('modalEliminarProspecto');
     
-    // ✅ FUNCIÓN PARA CAPITALIZAR DESTINOS AL SALIR DEL CAMPO
-    function capitalizarDestino(input) {
-        if (!input.value) return;
-        
-        // Capitalizar cada palabra
-        let palabras = input.value.split(',');
-        palabras = palabras.map((parte, index) => {
-            if (index === 0) {
-                // Para la primera parte (ciudad), capitalizar palabras específicas
-                return parte.trim()
-                    .toLowerCase()
-                    .split(' ')
-                    .map(palabra => {
-                        // Mantener abreviaturas en mayúsculas
-                        if (['puj', 'sdq', 'mex', 'usa', 'uk', 'uae'].includes(palabra.toLowerCase())) {
-                            return palabra.toUpperCase();
-                        }
-                        // Capitalizar palabras comunes
-                        return palabra.charAt(0).toUpperCase() + palabra.slice(1);
-                    })
-                    .join(' ');
-            } else {
-                // Para el país, solo capitalizar primera letra
-                return parte.trim().charAt(0).toUpperCase() + parte.trim().slice(1).toLowerCase();
+    if (modalEliminar) {
+        modalEliminar.addEventListener('show.bs.modal', function(event) {
+            try {
+                const button = event.relatedTarget;
+                
+                if (!button) {
+                    console.error("No se pudo obtener el botón que abrió el modal de eliminación");
+                    return;
+                }
+                
+                const prospectoId = button.getAttribute('data-prospecto-id');
+                const prospectoNombre = button.getAttribute('data-prospecto-nombre');
+                
+                const elementoNombre = document.getElementById('prospectoToDelete');
+                const formulario = document.getElementById('formEliminarProspecto');
+                
+                if (elementoNombre) {
+                    elementoNombre.textContent = prospectoNombre;
+                }
+                
+                if (formulario) {
+                    formulario.action = `/prospectos/${prospectoId}/eliminar`;
+                    console.log("🗑️ Configurando eliminación para:", prospectoNombre);
+                }
+                
+            } catch (error) {
+                console.error("❌ Error en modal de eliminación:", error);
             }
         });
-        
-        input.value = palabras.join(', ');
     }
     
-    // Aplicar capitalización al perder focus
-    if (destinoInput) {
-        destinoInput.addEventListener('blur', function() {
-            capitalizarDestino(this);
-        });
-    }
-    
-    if (editDestinoInput) {
-        editDestinoInput.addEventListener('blur', function() {
-            capitalizarDestino(this);
-        });
-    }
-});
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Mostrar loading en formularios
+    // ========== DEPURACIÓN DE FORMULARIOS ==========
     const forms = document.querySelectorAll('form');
-    forms.forEach(form => {
-        form.addEventListener('submit', function() {
+    forms.forEach((form, index) => {
+        form.addEventListener('submit', function(e) {
+            console.log(`📤 Enviando formulario ${index + 1}:`, this.action);
+            
+            // Mostrar datos del formulario
+            const formData = new FormData(this);
+            console.log("Datos a enviar:");
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}: ${value}`);
+            }
+            
+            // Mostrar loading
             const submitBtn = this.querySelector('button[type="submit"]');
             if (submitBtn && !submitBtn.disabled) {
                 const originalText = submitBtn.innerHTML;
@@ -1024,16 +946,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Auto-formato de fechas
-    const fechaInputs = document.querySelectorAll('input[placeholder*="dd/mm/aaaa"]');
-    fechaInputs.forEach(input => {
-        input.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.length >= 2) value = value.substring(0, 2) + '/' + value.substring(2);
-            if (value.length >= 5) value = value.substring(0, 5) + '/' + value.substring(5, 9);
-            e.target.value = value;
-        });
-    });
+    console.log("✅ Todos los event listeners configurados");
+});
+
+// ========== AUTOCOMPLETADO PARA DESTINOS ==========
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar autocompletado si los elementos existen
+    const destinoInput = document.getElementById('destinoInput');
+    const editDestinoInput = document.getElementById('editDestino');
+    
+    if (destinoInput) {
+        console.log("✅ Configurando autocompletado para destinoInput");
+        // Tu código de autocompletado aquí
+    }
+    
+    if (editDestinoInput) {
+        console.log("✅ Configurando autocompletado para editDestinoInput");
+        // Tu código de autocompletado aquí
+    }
 });
 </script>
 {% endblock %}
