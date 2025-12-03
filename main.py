@@ -5,7 +5,6 @@ import shutil
 import secrets
 from datetime import datetime, date, timedelta
 from typing import Optional
-
 # Imports de librerías de terceros (pypi)
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
@@ -13,13 +12,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 import pandas as pd
-
 # Imports de módulos locales de la aplicación
 import models
 import database
 import auth
 from models import TipoUsuario, EstadoProspecto
 from sqlalchemy import func, or_  #
+from difflib import get_close_matches
+import re
+
+
 
 app = FastAPI(title="Sistema de Prospectos")
 
@@ -814,6 +816,11 @@ async def crear_prospecto(
         db.rollback()
         print(f"❌ Error creating prospect: {e}")
         return RedirectResponse(url="/prospectos?error=Error al crear prospecto", status_code=303)
+
+
+
+
+
 
 @app.post("/prospectos/{prospecto_id}/editar")
 async def editar_prospecto(
@@ -1943,30 +1950,30 @@ async def sugerencias_destinos(
 ):
     """Devuelve sugerencias de destinos existentes"""
     if len(q) < 2:
-        return []
+        return JSONResponse(content={"sugerencias": []})
     
-    # Buscar destinos similares (case-insensitive)
-    destinos = db.query(models.Prospecto.destino).filter(
-        models.Prospecto.destino.isnot(None),
-        models.Prospecto.destino != '',
-        models.Prospecto.destino.ilike(f"%{q}%")
-    ).distinct().limit(limit).all()
-    
-    # Formatear respuesta
-    sugerencias = [destino[0] for destino in destinos if destino[0]]
-    
-    # Si no hay sugerencias, agregar algunas comunes basadas en el input
-    if not sugerencias and len(q) >= 3:
-        destinos_comunes = [
-            f"{q.title()}, México",
-            f"{q.title()}, República Dominicana", 
-            f"{q.title()}, Colombia",
-            f"{q.title()}, España",
-            f"{q.title()}, USA"
-        ]
-        sugerencias = destinos_comunes[:3]
-    
-    return JSONResponse(content={"sugerencias": sugerencias})
+    try:
+        # Buscar destinos que contengan el texto (case-insensitive)
+        destinos = db.query(models.Prospecto.destino).filter(
+            models.Prospecto.destino.isnot(None),
+            models.Prospecto.destino != '',
+            models.Prospecto.destino.ilike(f"%{q}%")
+        ).distinct().limit(limit).all()
+        
+        # Extraer solo los strings
+        sugerencias = [destino[0] for destino in destinos if destino[0]]
+        
+        # Ordenar por relevancia (los que empiezan con la búsqueda primero)
+        sugerencias.sort(key=lambda x: 
+            0 if x.lower().startswith(q.lower()) else 
+            1 if q.lower() in x.lower() else 2
+        )
+        
+        return JSONResponse(content={"sugerencias": sugerencias[:limit]})
+        
+    except Exception as e:
+        print(f"Error en sugerencias_destinos: {e}")
+        return JSONResponse(content={"sugerencias": []})
 
 # ✅ ENDPOINT PARA NORMALIZAR DESTINOS EXISTENTES
 @app.post("/api/destinos/normalizar")

@@ -254,7 +254,7 @@
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
                                         <a href="/prospectos/{{ prospecto.id }}/seguimiento" 
-                                           class="btn btn-outline-info" title="Ver seguimiento">
+                                        class="btn btn-outline-info" title="Ver seguimiento">
                                             📋
                                         </a>
                                         <button type="button" class="btn btn-outline-primary" 
@@ -270,8 +270,8 @@
                                                 data-indicativo-telefono-secundario="{{ prospecto.indicativo_telefono_secundario or '57' }}"
                                                 data-ciudad-origen="{{ prospecto.ciudad_origen or '' }}"
                                                 data-destino="{{ prospecto.destino or '' }}"
-                                                data-fecha-ida="{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%d/%m/%Y') }}{% endif %}"
-                                                data-fecha-vuelta="{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%d/%m/%Y') }}{% endif %}"
+                                                data-fecha-ida="{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%Y-%m-%d') }}{% endif %}"
+                                                data-fecha-vuelta="{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%Y-%m-%d') }}{% endif %}" 
                                                 data-pasajeros-adultos="{{ prospecto.pasajeros_adultos }}"
                                                 data-pasajeros-ninos="{{ prospecto.pasajeros_ninos }}"
                                                 data-pasajeros-infantes="{{ prospecto.pasajeros_infantes }}"
@@ -280,6 +280,7 @@
                                                 title="Editar prospecto">
                                             ✏️
                                         </button>
+                                        {% if current_user.tipo_usuario in ['administrador', 'supervisor'] %}
                                         <button type="button" class="btn btn-outline-danger" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#modalEliminarProspecto"
@@ -288,6 +289,7 @@
                                                 title="Eliminar prospecto">
                                             🗑️
                                         </button>
+                                        {% endif %}
                                     </div>
                                 </td>
                                 <!-- En la tabla, dentro del formulario de asignación -->
@@ -880,6 +882,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const destinosSugeridosEdit = document.getElementById('destinosSugeridosEdit');
     
     // Función para buscar sugerencias
+    // En el script de prospectos.html, verifica que las URLs sean correctas:
     async function buscarSugerenciasDestinos(termino, datalistElement) {
         if (termino.length < 2) {
             datalistElement.innerHTML = '';
@@ -887,7 +890,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
+            // Asegúrate que la URL coincida con tu ruta FastAPI
             const response = await fetch(`/api/destinos/sugerencias?q=${encodeURIComponent(termino)}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
             const data = await response.json();
             
             // Limpiar sugerencias anteriores
@@ -902,6 +911,21 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error buscando sugerencias:', error);
+            // Fallback: sugerencias locales básicas
+            if (termino.length >= 3) {
+                const sugerenciasFallback = [
+                    `${termino}, México`,
+                    `${termino}, Colombia`,
+                    `${termino}, República Dominicana`
+                ];
+                
+                datalistElement.innerHTML = '';
+                sugerenciasFallback.forEach(sug => {
+                    const option = document.createElement('option');
+                    option.value = sug;
+                    datalistElement.appendChild(option);
+                });
+            }
         }
     }
     
