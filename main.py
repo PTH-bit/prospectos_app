@@ -1762,7 +1762,12 @@ async def historial_cliente(
 async def actualizar_viaje(
     request: Request,
     prospecto_id: int,
+    nombre: str = Form(None),  
+    apellido: str = Form(None),  
     correo_electronico: str = Form(None),
+    telefono: str = Form(...),
+    indicativo_telefono: str = Form("57"),
+    indicativo_telefono_secundario: str = Form("57"),
     ciudad_origen: str = Form(None),
     destino: str = Form(None),
     fecha_ida: str = Form(None),
@@ -1803,9 +1808,15 @@ async def actualizar_viaje(
             fecha_vuelta_date = datetime.strptime(fecha_vuelta, "%d/%m/%Y").date()
         
         # Actualizar información
+        prospecto.nombre = nombre
+        prospecto.apellido = apellido
         prospecto.correo_electronico = correo_electronico
         prospecto.ciudad_origen = ciudad_origen
         prospecto.destino = destino
+        prospecto.telefono = telefono
+        prospecto.indicativo_telefono = indicativo_telefono
+        prospecto.telefono_secundario = telefono_secundario
+        prospecto.indicativo_telefono_secundario = indicativo_telefono_secundario
         prospecto.fecha_ida = fecha_ida_date
         prospecto.fecha_vuelta = fecha_vuelta_date
         prospecto.pasajeros_adultos = pasajeros_adultos
