@@ -576,7 +576,7 @@ async def listar_prospectos(
             # ✅ POR DEFECTO PARA ADMIN/SUPERVISOR: Solo mostrar prospectos "Nuevos"
             query = query.filter(models.Prospecto.estado == EstadoProspecto.NUEVO.value)
     
-    # ✅ FILTRO DE BÚSQUEDA GLOBAL
+    # ✅ FILTRO DE BÚSQUEDA GLOBAL (INCLUYE TELÉFONO SECUNDARIO)
     if busqueda_global:
         search_term = f"%{busqueda_global}%"
         query = query.filter(
@@ -584,6 +584,7 @@ async def listar_prospectos(
                 models.Prospecto.nombre.ilike(search_term),
                 models.Prospecto.apellido.ilike(search_term),
                 models.Prospecto.telefono.ilike(search_term),
+                models.Prospecto.telefono_secundario.ilike(search_term),
                 models.Prospecto.correo_electronico.ilike(search_term),
                 models.Prospecto.destino.ilike(search_term),
                 models.Prospecto.ciudad_origen.ilike(search_term),
@@ -592,12 +593,21 @@ async def listar_prospectos(
         )
         print(f"🔍 Aplicando búsqueda global: {busqueda_global}")
     
+    # ✅ FILTRO POR TELÉFONO (INCLUYE PRINCIPAL Y SECUNDARIO)
+    if telefono:
+        telefono_term = f"%{telefono}%"
+        query = query.filter(
+            or_(
+                models.Prospecto.telefono.ilike(telefono_term),
+                # ✅ AGREGADO: Buscar en teléfono secundario
+                models.Prospecto.telefono_secundario.ilike(telefono_term)
+            )
+        )
+        print(f"📞 Aplicando filtro teléfono (incluye secundario): {telefono}")
+    
     # Aplicar filtros existentes
     if destino:
         query = query.filter(models.Prospecto.destino.ilike(f"%{destino}%"))
-    
-    if telefono:
-        query = query.filter(models.Prospecto.telefono.ilike(f"%{telefono}%"))
     
     if medio_ingreso_id and medio_ingreso_id != "todos":
         query = query.filter(models.Prospecto.medio_ingreso_id == int(medio_ingreso_id))
