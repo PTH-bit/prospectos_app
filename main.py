@@ -23,6 +23,7 @@ import re
 
 
 
+
 app = FastAPI(title="Sistema de Prospectos")
 
 # Configuración para upload de archivos
@@ -161,9 +162,7 @@ async def logout(request: Request):
     response.delete_cookie("session_token")
     return response
 
-# Dashboard principal -
-from datetime import datetime, date, timedelta  # IMPORTACIÓN COMPLETA
-from sqlalchemy import func
+
 # Dashboard principal con filtros de fecha - VERSIÓN CORREGIDA
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
@@ -674,44 +673,70 @@ async def crear_prospecto(
         return RedirectResponse(url="/", status_code=303)
     
     try:
-        # ✅ VALIDACIÓN DE INDICATIVOS (NUEVO)
+        # ✅ VALIDACIÓN DE INDICATIVOS
         if not indicativo_telefono.isdigit() or len(indicativo_telefono) > 4:
             return RedirectResponse(url="/prospectos?error=Indicativo principal inválido. Solo números, máximo 4 dígitos", status_code=303)
         
         if indicativo_telefono_secundario and (not indicativo_telefono_secundario.isdigit() or len(indicativo_telefono_secundario) > 4):
             return RedirectResponse(url="/prospectos?error=Indicativo secundario inválido. Solo números, máximo 4 dígitos", status_code=303)
 
-        # ✅ DETECCIÓN MEJORADA DE CLIENTE EXISTENTE - BUSCA EN AMBOS TELÉFONOS
-        cliente_existente = db.query(models.Prospecto).filter(
+        # ✅ DETECCIÓN MEJORADA: OBTENER TODOS LOS REGISTROS DEL CLIENTE
+        # Buscar por teléfono principal
+        clientes_existentes_principal = db.query(models.Prospecto).filter(
             or_(
                 models.Prospecto.telefono == telefono,
                 models.Prospecto.telefono_secundario == telefono
             )
-        ).first()
-        
-        # Si no encontró por teléfono principal, buscar por teléfono secundario
-        if not cliente_existente and telefono_secundario:
-            cliente_existente = db.query(models.Prospecto).filter(
+        ).all()
+
+        # Buscar por teléfono secundario (si existe)
+        clientes_existentes_secundario = []
+        if telefono_secundario:
+            clientes_existentes_secundario = db.query(models.Prospecto).filter(
                 or_(
                     models.Prospecto.telefono == telefono_secundario,
                     models.Prospecto.telefono_secundario == telefono_secundario
                 )
-            ).first()
+            ).all()
+
+        # Combinar resultados únicos
+        clientes_existentes_set = set()
+        todos_clientes_existentes = []
+
+        # Agregar de principal
+        for cliente in clientes_existentes_principal:
+            if cliente.id not in clientes_existentes_set:
+                clientes_existentes_set.add(cliente.id)
+                todos_clientes_existentes.append(cliente)
+
+        # Agregar de secundario
+        for cliente in clientes_existentes_secundario:
+            if cliente.id not in clientes_existentes_set:
+                clientes_existentes_set.add(cliente.id)
+                todos_clientes_existentes.append(cliente)
+
+        # ✅ ORDENAR POR fecha_registro (nombre correcto en tu modelo)
+        todos_clientes_existentes.sort(key=lambda x: x.fecha_registro, reverse=True)
+
+        # Usar el más reciente como "cliente principal" para compatibilidad
+        cliente_existente_principal = todos_clientes_existentes[0] if todos_clientes_existentes else None
         
-        if cliente_existente and not forzar_nuevo:
-            # Obtener datos del cliente existente
+        if todos_clientes_existentes and not forzar_nuevo:
+            # Obtener datos de TODOS los registros del cliente
+            todos_ids = [c.id for c in todos_clientes_existentes]
+            
             interacciones_previas = db.query(models.Interaccion).filter(
-                models.Interaccion.prospecto_id == cliente_existente.id
+                models.Interaccion.prospecto_id.in_(todos_ids)
             ).count()
             
             documentos_previos = db.query(models.Documento).filter(
-                models.Documento.prospecto_id == cliente_existente.id
+                models.Documento.prospecto_id.in_(todos_ids)
             ).count()
             
-            # Obtener últimas interacciones
+            # Obtener últimas interacciones de TODOS los registros
             ultimas_interacciones = db.query(models.Interaccion).filter(
-                models.Interaccion.prospecto_id == cliente_existente.id
-            ).order_by(models.Interaccion.fecha_creacion.desc()).limit(3).all()
+                models.Interaccion.prospecto_id.in_(todos_ids)
+            ).order_by(models.Interaccion.fecha_creacion.desc()).limit(5).all()
             
             # Preparar datos para el template
             nuevos_datos = {
@@ -733,14 +758,21 @@ async def crear_prospecto(
                 "observaciones": observaciones
             }
             
+            # ✅ AGREGAR: Obtener lista de agentes para el select
+            agentes = db.query(models.Usuario).filter(
+                models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value
+            ).all()
+            
             # Renderizar template de confirmación
             return templates.TemplateResponse("confirmar_cliente_existente.html", {
                 "request": request,
-                "cliente_existente": cliente_existente,
+                "cliente_existente_principal": cliente_existente_principal,
+                "registros_previos": todos_clientes_existentes,
                 "interacciones_previas": interacciones_previas,
                 "documentos_previos": documentos_previos,
                 "ultimas_interacciones": ultimas_interacciones,
-                "nuevos_datos": nuevos_datos
+                "nuevos_datos": nuevos_datos,
+                "agentes": agentes  # ✅ Variable que faltaba
             })
         
         # ✅ DETERMINAR AGENTE ASIGNADO
@@ -759,9 +791,32 @@ async def crear_prospecto(
         elif user.tipo_usuario == TipoUsuario.AGENTE.value:
             agente_final_id = user.id
 
+        # ✅ DETERMINAR DATOS PARA EL NUEVO REGISTRO
+        # Prioridad: 1) Datos del formulario, 2) Datos del cliente más reciente, 3) Ninguno
+        nombre_final = nombre
+        apellido_final = apellido
+        email_final = correo_electronico
 
+        # Si no se proporcionaron en el formulario, intentar usar del cliente más reciente
+        if not nombre_final and todos_clientes_existentes:
+            for cliente in todos_clientes_existentes:
+                if cliente.nombre:
+                    nombre_final = cliente.nombre
+                    break
 
-        # ✅ CREAR NUEVO PROSPECTO CON INDICATIVOS
+        if not apellido_final and todos_clientes_existentes:
+            for cliente in todos_clientes_existentes:
+                if cliente.apellido:
+                    apellido_final = cliente.apellido
+                    break
+
+        if not email_final and todos_clientes_existentes:
+            for cliente in todos_clientes_existentes:
+                if cliente.correo_electronico:
+                    email_final = cliente.correo_electronico
+                    break
+
+        # ✅ CREAR NUEVO PROSPECTO CON INDICATIVOS Y DATOS MEJORADOS
         fecha_ida_date = None
         fecha_vuelta_date = None
         
@@ -771,12 +826,12 @@ async def crear_prospecto(
             fecha_vuelta_date = datetime.strptime(fecha_vuelta, "%d/%m/%Y").date()
         
         # Determinar si es cliente recurrente
-        cliente_recurrente = cliente_existente is not None
-        
+        cliente_recurrente = len(todos_clientes_existentes) > 0
+
         prospecto = models.Prospecto(
-            nombre=nombre,
-            apellido=apellido,
-            correo_electronico=correo_electronico,
+            nombre=nombre_final,  # ✅ Usar nombre mejorado
+            apellido=apellido_final,  # ✅ Usar apellido mejorado
+            correo_electronico=email_final,  # ✅ Usar email mejorado
             telefono=telefono,
             indicativo_telefono=indicativo_telefono,
             telefono_secundario=telefono_secundario,
@@ -792,7 +847,7 @@ async def crear_prospecto(
             observaciones=observaciones,
             agente_asignado_id=agente_final_id,  # ✅ USAR AGENTE DETERMINADO
             cliente_recurrente=cliente_recurrente,
-            prospecto_original_id=cliente_existente.id if cliente_existente and cliente_recurrente else None
+            prospecto_original_id=todos_clientes_existentes[0].id if todos_clientes_existentes else None
         )
         
         # ✅ VERIFICAR Y ASIGNAR DATOS COMPLETOS
@@ -812,8 +867,8 @@ async def crear_prospecto(
                 prospecto_id=prospecto.id,
                 usuario_id=user.id,
                 tipo_interaccion="sistema",
-                descripcion=f"Cliente recurrente registrado. Teléfono: {telefono}. Cliente original: ID {cliente_existente.id}",
-                estado_anterior=cliente_existente.estado,
+                descripcion=f"Cliente recurrente registrado. Teléfono: {telefono}. Registros previos: {len(todos_clientes_existentes)}",
+                estado_anterior=cliente_existente_principal.estado if cliente_existente_principal else None,
                 estado_nuevo=EstadoProspecto.NUEVO.value
             )
             db.add(interaccion)
@@ -1662,8 +1717,6 @@ async def reactivar_prospecto(
         db.rollback()
         print(f"❌ Error reactivando prospecto: {e}")
         return RedirectResponse(url="/prospectos/cerrados?error=Error al reactivar prospecto", status_code=303)
-
-
 
 
 # Endpoint para verificar autenticación
