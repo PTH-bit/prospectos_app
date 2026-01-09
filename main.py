@@ -4,6 +4,7 @@ import io
 import shutil
 import secrets
 from datetime import datetime, date, timedelta
+import calendar  # ✅ NUEVO: Para calcular último día del mes
 from typing import Optional
 # Imports de librerías de terceros (pypi)
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, UploadFile, File
@@ -16,6 +17,7 @@ import pandas as pd
 import models
 import database
 import auth
+import excel_import
 from models import TipoUsuario, EstadoProspecto
 from sqlalchemy import func, or_, and_
 from difflib import get_close_matches
@@ -32,7 +34,7 @@ def enviar_notificacion_email(destinatario: str, asunto: str, cuerpo: str):
         # En un entorno real, aquí se configurarían las credenciales SMTP
         # server = smtplib.SMTP('smtp.gmail.com', 587)
         # server.starttls()
-        # server.login("tu_correo@gmail.com", "tu_password")
+        # server.login("zaritahouse@gmail.com", "Travel2026/*")
         # msg = MIMEText(cuerpo)
         # msg['Subject'] = asunto
         # msg['From'] = "sistema@prospectos.com"
@@ -54,6 +56,40 @@ def parsear_fecha(fecha_str: str) -> Optional[date]:
     except ValueError:
         try:
             return datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        except ValueError:
+            print(f"⚠️ Error parseando fecha: {fecha_str}")
+            return None
+
+# ========== FUNCIONES DE NORMALIZACIÓN DE DATOS ==========
+
+def normalizar_texto_mayusculas(texto: str) -> Optional[str]:
+    """Convierte texto a mayúsculas y elimina espacios extras. Retorna None si vacío."""
+    if not texto or not str(texto).strip():
+        return None
+    return str(texto).strip().upper()
+
+def normalizar_numero(numero: str) -> str:
+    """Remueve espacios, guiones y símbolos de números. Solo deja dígitos."""
+    if not numero:
+        return ""
+    return re.sub(r'[^0-9]', '', str(numero))
+
+def normalizar_email(email: str) -> Optional[str]:
+    """Normaliza email a minúsculas y elimina espacios."""
+    if not email or not str(email).strip():
+        return None
+    return str(email).strip().lower()
+
+def normalizar_fecha_input(fecha_str: str) -> Optional[date]:
+    """Parsea fecha de input HTML (YYYY-MM-DD) o DD/MM/YYYY a objeto date."""
+    if not fecha_str or not str(fecha_str).strip():
+        return None
+    fecha_str = str(fecha_str).strip()
+    try:
+        return datetime.strptime(fecha_str, "%Y-%m-%d").date()
+    except ValueError:
+        try:
+            return datetime.strptime(fecha_str, "%d/%m/%Y").date()
         except ValueError:
             print(f"⚠️ Error parseando fecha: {fecha_str}")
             return None
@@ -107,10 +143,22 @@ def startup():
             )
             db.add(agente_user)
         
+        # Crear usuario de Servicio al Cliente
+        if not db.query(models.Usuario).filter(models.Usuario.username == "servicio_cliente").first():
+            servicio_user = models.Usuario(
+                username="servicio_cliente",
+                email="servicioclientetravelhouse@gmail.com",
+                hashed_password=auth.get_password_hash("servicio123"),
+                tipo_usuario=TipoUsuario.AGENTE.value,
+                activo=1
+            )
+            db.add(servicio_user)
+        
         db.commit()
         print("Datos iniciales creados correctamente")
         print("Usuario admin: admin / admin123")
         print("Usuario agente: agente1 / agente123")
+        print("Usuario servicio_cliente: servicio_cliente / servicio123")
         print("No se crearon prospectos de prueba. Puedes crearlos manualmente.")
         
     except Exception as e:
@@ -197,6 +245,146 @@ async def logout(request: Request):
     return response
 
 
+# ========== IMPORTACIÓN DE DATOS DESDE EXCEL ==========
+
+@app.get("/importar-datos", response_class=HTMLResponse)
+async def mostrar_importar_datos(
+    request: Request,
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Muestra la página de importación de datos (solo administradores)"""
+    return templates.TemplateResponse("importar_datos.html", {
+        "request": request,
+        "current_user": user
+    })
+
+
+@app.post("/importar-usuarios")
+async def importar_usuarios(
+    request: Request,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Procesa la importación de usuarios desde Excel"""
+    try:
+        # Validar archivo
+        es_valido, mensaje_error = excel_import.validar_archivo_excel(archivo)
+        if not es_valido:
+            return templates.TemplateResponse("importar_datos.html", {
+                "request": request,
+                "current_user": user,
+                "resultado_usuarios": {
+                    "exitosos": 0,
+                    "errores": [{"fila": 0, "error": mensaje_error}]
+                }
+            })
+        
+        # Guardar archivo temporalmente
+        temp_path = f"uploads/temp_{archivo.filename}"
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+        
+        # Importar usuarios
+        resultado = excel_import.importar_usuarios_desde_excel(temp_path, db)
+        
+        # Eliminar archivo temporal
+        os.remove(temp_path)
+        
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_usuarios": resultado
+        })
+        
+    except Exception as e:
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_usuarios": {
+                "exitosos": 0,
+                "errores": [{"fila": 0, "error": f"Error procesando archivo: {str(e)}"}]
+            }
+        })
+
+
+@app.post("/importar-prospectos")
+async def importar_prospectos(
+    request: Request,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Procesa la importación de prospectos desde Excel"""
+    try:
+        # Validar archivo
+        es_valido, mensaje_error = excel_import.validar_archivo_excel(archivo)
+        if not es_valido:
+            return templates.TemplateResponse("importar_datos.html", {
+                "request": request,
+                "current_user": user,
+                "resultado_prospectos": {
+                    "exitosos": 0,
+                    "errores": [{"fila": 0, "error": mensaje_error}],
+                    "recurrentes": 0
+                }
+            })
+        
+        # Guardar archivo temporalmente
+        temp_path = f"uploads/temp_{archivo.filename}"
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+        
+        # Importar prospectos
+        resultado = excel_import.importar_prospectos_desde_excel(temp_path, db)
+        
+        # Eliminar archivo temporal
+        os.remove(temp_path)
+        
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_prospectos": resultado
+        })
+        
+    except Exception as e:
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_prospectos": {
+                "exitosos": 0,
+                "errores": [{"fila": 0, "error": f"Error procesando archivo: {str(e)}"}],
+                "recurrentes": 0
+            }
+        })
+
+
+@app.get("/descargar-plantilla/{tipo}")
+async def descargar_plantilla(
+    tipo: str,
+    user: models.Usuario = Depends(require_admin)
+):
+    """Descarga plantilla Excel de ejemplo"""
+    if tipo == "usuarios":
+        file_path = "static/plantillas/plantilla_usuarios.xlsx"
+        filename = "plantilla_usuarios.xlsx"
+    elif tipo == "prospectos":
+        file_path = "static/plantillas/plantilla_prospectos.xlsx"
+        filename = "plantilla_prospectos.xlsx"
+    else:
+        raise HTTPException(status_code=404, detail="Plantilla no encontrada")
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Archivo de plantilla no encontrado")
+    
+    return StreamingResponse(
+        open(file_path, "rb"),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 # Dashboard principal con filtros de fecha - VERSIÓN CORREGIDA
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
@@ -225,7 +413,7 @@ async def dashboard(
         # Inicializar todas las variables
         total_prospectos = prospectos_con_datos = prospectos_sin_datos = 0
         clientes_sin_asignar = clientes_asignados = destinos_count = ventas_count = 0
-        prospectos_nuevos = prospectos_seguimiento = prospectos_cotizados = prospectos_ganados = prospectos_perdidos = 0
+        prospectos_nuevos = prospectos_seguimiento = prospectos_cotizados = prospectos_ganados = prospectos_perdidos = ventas_canceladas = 0
         destinos_populares = []
         conversion_agentes = []
         
@@ -309,30 +497,40 @@ async def dashboard(
                 models.Prospecto.fecha_registro >= fecha_inicio_dt,
                 models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
-            prospectos_seguimiento = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.EN_SEGUIMIENTO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            
+            prospectos_seguimiento = db.query(models.Prospecto).filter(
+                models.Prospecto.estado == EstadoProspecto.EN_SEGUIMIENTO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
-            prospectos_cotizados = db.query(models.EstadisticaCotizacion).filter(
-                models.EstadisticaCotizacion.fecha_cotizacion >= fecha_inicio_obj,
-                models.EstadisticaCotizacion.fecha_cotizacion <= fecha_fin_obj
+            # Cotizados: contar prospectos en estado COTIZADO actualmente
+            prospectos_cotizados = db.query(models.Prospecto).filter(
+                models.Prospecto.estado == EstadoProspecto.COTIZADO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
-            prospectos_ganados = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.GANADO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            # Ganados, Perdidos y Canceladas: contar estado ACTUAL
+            prospectos_ganados = db.query(models.Prospecto).filter(
+                models.Prospecto.estado == EstadoProspecto.GANADO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
-            prospectos_perdidos = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.CERRADO_PERDIDO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            prospectos_perdidos = db.query(models.Prospecto).filter(
+                models.Prospecto.estado == EstadoProspecto.CERRADO_PERDIDO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
-            print(f"📊 Estados - Nuevos: {prospectos_nuevos}, Seguimiento: {prospectos_seguimiento}, Cotizados: {prospectos_cotizados}, Ganados: {prospectos_ganados}, Perdidos: {prospectos_perdidos}")
+            ventas_canceladas = db.query(models.Prospecto).filter(
+                models.Prospecto.estado == EstadoProspecto.VENTA_CANCELADA.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
+            ).count()
+            
+            print(f"📊 Estados - Nuevos: {prospectos_nuevos}, Seguimiento: {prospectos_seguimiento}, Cotizados: {prospectos_cotizados}, Ganados: {prospectos_ganados}, Perdidos: {prospectos_perdidos}, Canceladas: {ventas_canceladas}")
             
             # Conversión por agente en el periodo
             conversion_agentes = []
@@ -340,7 +538,8 @@ async def dashboard(
                 models.Usuario.id,
                 models.Usuario.username
             ).filter(
-                models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value
+                models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value,
+                models.Usuario.activo == 1  # ✅ Solo agentes activos
             ).all()
             
             for agente in agentes_con_prospectos:
@@ -526,6 +725,7 @@ async def dashboard(
         "prospectos_cotizados": prospectos_cotizados,
         "prospectos_ganados": prospectos_ganados,
         "prospectos_perdidos": prospectos_perdidos,
+        "ventas_canceladas": ventas_canceladas,
         
         # Datos para gráficos
         "destinos_populares": destinos_populares,
@@ -589,6 +789,8 @@ async def listar_prospectos(
     agente_asignado_id: str = Query(None),
     estado: str = Query(None),
     busqueda_global: str = Query(None),
+    fecha_inicio: str = Query(None),  # ✅ NUEVO: Filtro de fecha inicio
+    fecha_fin: str = Query(None),  # ✅ NUEVO: Filtro de fecha fin
     page: int = Query(1, ge=1),  # ✅ Paginación: Página actual
     limit: int = Query(10, ge=1, le=100),  # ✅ Paginación: Registros por página
     db: Session = Depends(database.get_db)
@@ -597,6 +799,19 @@ async def listar_prospectos(
     
     if not user:
         return RedirectResponse(url="/", status_code=303)
+    
+    # ✅ DETERMINAR RANGO DE FECHAS (DEFAULT: MES ACTUAL)
+    if not fecha_inicio or not fecha_fin:
+        hoy = date.today()
+        fecha_inicio_date = date(hoy.year, hoy.month, 1)
+        ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
+        fecha_fin_date = date(hoy.year, hoy.month, ultimo_dia)
+        # Convertir a string para la vista
+        fecha_inicio = fecha_inicio_date.strftime("%Y-%m-%d")
+        fecha_fin = fecha_fin_date.strftime("%Y-%m-%d")
+    else:
+        fecha_inicio_date = datetime.strptime(fecha_inicio, "%Y-%m-%d").date()
+        fecha_fin_date = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
     
     # ✅ CONSTRUIR QUERY BASE SEGÚN ROL (SIN FILTRO DE ESTADO INICIAL)
     if user.tipo_usuario == TipoUsuario.AGENTE.value:
@@ -645,6 +860,12 @@ async def listar_prospectos(
             # Ajustar valores para que se reflejen en la vista
             estado = EstadoProspecto.NUEVO.value
             agente_asignado_id = "sin_asignar"
+    
+    # ✅ FILTRO POR RANGO DE FECHAS (fecha_registro)
+    query = query.filter(
+        models.Prospecto.fecha_registro >= fecha_inicio_date,
+        models.Prospecto.fecha_registro <= fecha_fin_date
+    )
 
     # ✅ FILTRO DE BÚSQUEDA GLOBAL
     if busqueda_global:
@@ -697,7 +918,8 @@ async def listar_prospectos(
     
     # Obtener datos para filtros
     agentes = db.query(models.Usuario).filter(
-        models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value
+        models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value,
+        models.Usuario.activo == 1  # ✅ Solo agentes activos
     ).all()
     
     medios_ingreso = db.query(models.MedioIngreso).all()
@@ -721,7 +943,10 @@ async def listar_prospectos(
         "page": page,
         "limit": limit,
         "total_pages": total_pages,
-        "total_registros": total_registros
+        "total_registros": total_registros,
+        # ✅ NUEVO: Filtros de fecha
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
     })
 
 @app.post("/prospectos")
@@ -895,33 +1120,61 @@ async def crear_prospecto(
                     email_final = cliente.correo_electronico
                     break
 
+        # ✅ NUEVO: Copiar campos adicionales de clientes ganados
+        fecha_nacimiento_final = None
+        numero_identificacion_final = None
+        direccion_final = None
+        
+        if todos_clientes_existentes:
+            for cliente in todos_clientes_existentes:
+                if cliente.fecha_nacimiento and not fecha_nacimiento_final:
+                    fecha_nacimiento_final = cliente.fecha_nacimiento
+                if cliente.numero_identificacion and not numero_identificacion_final:
+                    numero_identificacion_final = cliente.numero_identificacion
+                if cliente.direccion and not direccion_final:
+                    direccion_final = cliente.direccion
+
         # ✅ CREAR NUEVO PROSPECTO CON INDICATIVOS Y DATOS MEJORADOS
-        fecha_ida_date = parsear_fecha(fecha_ida)
-        fecha_vuelta_date = parsear_fecha(fecha_vuelta)
+        fecha_ida_date = normalizar_fecha_input(fecha_ida)
+        fecha_vuelta_date = normalizar_fecha_input(fecha_vuelta)
+        
+        # ✅ NORMALIZAR DATOS ANTES DE GUARDAR
+        telefono_normalizado = normalizar_numero(telefono)
+        telefono_secundario_normalizado = normalizar_numero(telefono_secundario) if telefono_secundario else None
+        nombre_normalizado = normalizar_texto_mayusculas(nombre_final)
+        apellido_normalizado = normalizar_texto_mayusculas(apellido_final)
+        ciudad_origen_normalizada = normalizar_texto_mayusculas(ciudad_origen)
+        destino_normalizado = normalizar_texto_mayusculas(destino)
+        email_normalizado = normalizar_email(email_final)
+        # observaciones NO se normalizan (mantener formato original)
         
         # Determinar si es cliente recurrente
         cliente_recurrente = len(todos_clientes_existentes) > 0
 
         prospecto = models.Prospecto(
-            nombre=nombre_final,  # ✅ Usar nombre mejorado
-            apellido=apellido_final,  # ✅ Usar apellido mejorado
-            correo_electronico=email_final,  # ✅ Usar email mejorado
-            telefono=telefono,
+            nombre=nombre_normalizado,  # ✅ NORMALIZADO A MAYÚSCULAS
+            apellido=apellido_normalizado,  # ✅ NORMALIZADO A MAYÚSCULAS
+            correo_electronico=email_normalizado,  # ✅ NORMALIZADO A MINÚSCULAS
+            telefono=telefono_normalizado,  # ✅ SOLO NÚMEROS
             indicativo_telefono=indicativo_telefono,
-            telefono_secundario=telefono_secundario,
+            telefono_secundario=telefono_secundario_normalizado,  # ✅ SOLO NÚMEROS
             indicativo_telefono_secundario=indicativo_telefono_secundario,
-            ciudad_origen=ciudad_origen,
-            destino=destino,
+            ciudad_origen=ciudad_origen_normalizada,  # ✅ NORMALIZADO A MAYÚSCULAS
+            destino=destino_normalizado,  # ✅ NORMALIZADO A MAYÚSCULAS
             fecha_ida=fecha_ida_date,
             fecha_vuelta=fecha_vuelta_date,
             pasajeros_adultos=pasajeros_adultos,
             pasajeros_ninos=pasajeros_ninos,
             pasajeros_infantes=pasajeros_infantes,
             medio_ingreso_id=medio_ingreso_id,
-            observaciones=observaciones,
+            observaciones=observaciones,  # ✅ SIN NORMALIZAR (mantener original)
             agente_asignado_id=agente_final_id,  # ✅ USAR AGENTE DETERMINADO
             cliente_recurrente=cliente_recurrente,
-            prospecto_original_id=todos_clientes_existentes[0].id if todos_clientes_existentes else None
+            prospecto_original_id=todos_clientes_existentes[0].id if todos_clientes_existentes else None,
+            # ✅ NUEVO: Copiar datos adicionales del cliente existente
+            fecha_nacimiento=fecha_nacimiento_final,
+            numero_identificacion=numero_identificacion_final,
+            direccion=direccion_final
         )
         
         # ✅ VERIFICAR Y ASIGNAR DATOS COMPLETOS
@@ -994,7 +1247,7 @@ async def editar_prospecto(
     request: Request,
     prospecto_id: int,
     telefono: str = Form(...),
-    indicativo_telefono: str = Form("57"),  # ✅ CORREGIDO: "57" sin +
+    indicativo_telefono: str = Form("57"),
     medio_ingreso_id: int = Form(...),
     nombre: str = Form(None),
     apellido: str = Form(None),
@@ -1008,7 +1261,12 @@ async def editar_prospecto(
     pasajeros_infantes: int = Form(0),
     observaciones: str = Form(None),
     telefono_secundario: str = Form(None),
-    indicativo_telefono_secundario: str = Form("57"),  # ✅ CORREGIDO: "57" sin +
+    indicativo_telefono_secundario: str = Form("57"),
+    estado: str = Form(None),
+    fecha_nacimiento: str = Form(None),
+    numero_identificacion: str = Form(None),
+    direccion: str = Form(None),  # ✅ NUEVO: Dirección para clientes ganados
+    origen_solicitud: str = Form(None),  # Nuevo parámetro
     db: Session = Depends(database.get_db)
 ):
     user = await get_current_user(request, db)
@@ -1018,51 +1276,90 @@ async def editar_prospecto(
     try:
         # ✅ AGREGAR VALIDACIÓN DE INDICATIVOS (COMO EN CREAR_PROSPECTO)
         if not indicativo_telefono.isdigit() or len(indicativo_telefono) > 4:
-            return RedirectResponse(url="/prospectos?error=Indicativo principal inválido. Solo números, máximo 4 dígitos", status_code=303)
+            redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=Indicativo principal inválido" if origen_solicitud == "seguimiento" else "/prospectos?error=Indicativo principal inválido. Solo números, máximo 4 dígitos"
+            return RedirectResponse(url=redirect_url, status_code=303)
         
         if indicativo_telefono_secundario and (not indicativo_telefono_secundario.isdigit() or len(indicativo_telefono_secundario) > 4):
-            return RedirectResponse(url="/prospectos?error=Indicativo secundario inválido. Solo números, máximo 4 dígitos", status_code=303)
+            redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=Indicativo secundario inválido" if origen_solicitud == "seguimiento" else "/prospectos?error=Indicativo secundario inválido. Solo números, máximo 4 dígitos"
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         # Buscar prospecto
         prospecto = db.query(models.Prospecto).filter(models.Prospecto.id == prospecto_id).first()
         if not prospecto:
-            return RedirectResponse(url="/prospectos?error=Prospecto no encontrado", status_code=303)
+            redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=Prospecto no encontrado" if origen_solicitud == "seguimiento" else "/prospectos?error=Prospecto no encontrado"
+            return RedirectResponse(url=redirect_url, status_code=303)
         
         # Verificar permisos: Agentes solo pueden editar sus propios prospectos
         if (user.tipo_usuario == TipoUsuario.AGENTE.value and 
             prospecto.agente_asignado_id != user.id):
-            return RedirectResponse(url="/prospectos?error=No tiene permisos para editar este prospecto", status_code=303)
+            redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=No tiene permisos" if origen_solicitud == "seguimiento" else "/prospectos?error=No tiene permisos para editar este prospecto"
+            return RedirectResponse(url=redirect_url, status_code=303)
         
         # Convertir fechas de string a date
-        fecha_ida_date = parsear_fecha(fecha_ida)
-        fecha_vuelta_date = parsear_fecha(fecha_vuelta)
+        fecha_ida_date = normalizar_fecha_input(fecha_ida)
+        fecha_vuelta_date = normalizar_fecha_input(fecha_vuelta)
+        fecha_nacimiento_date = normalizar_fecha_input(fecha_nacimiento) if fecha_nacimiento else None
+        
+        # ✅ NORMALIZAR DATOS ANTES DE ACTUALIZAR
+        telefono_normalizado = normalizar_numero(telefono)
+        telefono_secundario_normalizado = normalizar_numero(telefono_secundario) if telefono_secundario else None
+        nombre_normalizado = normalizar_texto_mayusculas(nombre)
+        apellido_normalizado = normalizar_texto_mayusculas(apellido)
+        ciudad_origen_normalizada = normalizar_texto_mayusculas(ciudad_origen)
+        destino_normalizado = normalizar_texto_mayusculas(destino)
+        email_normalizado = normalizar_email(correo_electronico)
+        numero_identificacion_normalizado = normalizar_numero(numero_identificacion) if numero_identificacion else None
+        direccion_normalizada = normalizar_texto_mayusculas(direccion)  # ✅ NUEVO
+        # observaciones NO se normalizan (mantener formato original)
+        
+        # Validar cambio de estado a VENTA_CANCELADA
+        if estado == EstadoProspecto.VENTA_CANCELADA.value:
+            if prospecto.estado != EstadoProspecto.GANADO.value and prospecto.estado_anterior != EstadoProspecto.GANADO.value:
+                redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=Solo se puede cancelar una venta que haya estado en estado GANADO" if origen_solicitud == "seguimiento" else "/prospectos?error=Solo se puede cancelar una venta que haya estado en estado GANADO"
+                return RedirectResponse(url=redirect_url, status_code=303)
+        
+        # Guardar estado anterior si cambia
+        if estado and estado != prospecto.estado:
+            prospecto.estado_anterior = prospecto.estado
+            prospecto.estado = estado
         
         # Actualizar datos del prospecto
-        prospecto.nombre = nombre
-        prospecto.apellido = apellido
-        prospecto.correo_electronico = correo_electronico
-        prospecto.telefono = telefono
-        prospecto.indicativo_telefono = indicativo_telefono  # ✅ NUEVO
-        prospecto.telefono_secundario = telefono_secundario
-        prospecto.indicativo_telefono_secundario = indicativo_telefono_secundario  # ✅ NUEVO
-        prospecto.ciudad_origen = ciudad_origen
-        prospecto.destino = destino
+        prospecto.nombre = nombre_normalizado  # ✅ NORMALIZADO A MAYÚSCULAS
+        prospecto.apellido = apellido_normalizado  # ✅ NORMALIZADO A MAYÚSCULAS
+        prospecto.correo_electronico = email_normalizado  # ✅ NORMALIZADO A MINÚSCULAS
+        prospecto.telefono = telefono_normalizado  # ✅ SOLO NÚMEROS
+        prospecto.indicativo_telefono = indicativo_telefono
+        prospecto.telefono_secundario = telefono_secundario_normalizado  # ✅ SOLO NÚMEROS
+        prospecto.indicativo_telefono_secundario = indicativo_telefono_secundario
+        prospecto.ciudad_origen = ciudad_origen_normalizada  # ✅ NORMALIZADO A MAYÚSCULAS
+        prospecto.destino = destino_normalizado  # ✅ NORMALIZADO A MAYÚSCULAS
         prospecto.fecha_ida = fecha_ida_date
         prospecto.fecha_vuelta = fecha_vuelta_date
         prospecto.pasajeros_adultos = pasajeros_adultos
         prospecto.pasajeros_ninos = pasajeros_ninos
         prospecto.pasajeros_infantes = pasajeros_infantes
         prospecto.medio_ingreso_id = medio_ingreso_id
-        prospecto.observaciones = observaciones
+        prospecto.observaciones = observaciones  # ✅ SIN NORMALIZAR (mantener original)
+        
+        # Campos adicionales para clientes GANADOS
+        if prospecto.estado == EstadoProspecto.GANADO.value:
+            prospecto.fecha_nacimiento = fecha_nacimiento_date
+            prospecto.numero_identificacion = numero_identificacion_normalizado  # ✅ SOLO NÚMEROS
+            prospecto.direccion = direccion_normalizada  # ✅ NUEVO: MAYÚSCULAS
         
         db.commit()
         
-        return RedirectResponse(url="/prospectos?success=Prospecto actualizado correctamente", status_code=303)
+        # Redirigir según origen
+        if origen_solicitud == "seguimiento":
+            return RedirectResponse(url=f"/prospectos/{prospecto_id}/seguimiento?success=Datos actualizados correctamente", status_code=303)
+        else:
+            return RedirectResponse(url="/prospectos?success=Prospecto actualizado correctamente", status_code=303)
     
     except Exception as e:
         db.rollback()
         print(f"❌ Error updating prospect: {e}")
-        return RedirectResponse(url="/prospectos?error=Error al actualizar prospecto", status_code=303)
+        redirect_url = f"/prospectos/{prospecto_id}/seguimiento?error=Error al actualizar" if origen_solicitud == "seguimiento" else "/prospectos?error=Error al actualizar prospecto"
+        return RedirectResponse(url=redirect_url, status_code=303)
 
 @app.post("/prospectos/{prospecto_id}/eliminar")
 async def eliminar_prospecto(
@@ -1086,14 +1383,32 @@ async def eliminar_prospecto(
             prospecto.agente_asignado_id != user.id):
             return RedirectResponse(url="/prospectos?error=No tiene permisos para eliminar este prospecto", status_code=303)
         
-        db.delete(prospecto)
+        # ✅ SOFT DELETE: Marcar como eliminado en lugar de borrar
+        prospecto.fecha_eliminacion = datetime.now()
+        
+        # Opcional: Cambiar estado a un estado especial
+        if prospecto.estado not in [EstadoProspecto.GANADO.value, EstadoProspecto.CERRADO_PERDIDO.value]:
+            prospecto.estado_anterior = prospecto.estado
+            prospecto.estado = "eliminado"
+        
+        # Crear interacción de eliminación para trazabilidad
+        interaccion = models.Interaccion(
+            prospecto_id=prospecto_id,
+            usuario_id=user.id,
+            tipo_interaccion="sistema",
+            descripcion=f"🗑️ Prospecto marcado como eliminado por {user.username}",
+            estado_anterior=prospecto.estado_anterior or prospecto.estado,
+            estado_nuevo="eliminado"
+        )
+        db.add(interaccion)
+        
         db.commit()
         
         return RedirectResponse(url="/prospectos?success=Prospecto eliminado correctamente", status_code=303)
     
     except Exception as e:
         db.rollback()
-        print(f"❌ Error deleting prospect: {e}")
+        print(f"❌ Error eliminando prospecto: {e}")
         return RedirectResponse(url="/prospectos?error=Error al eliminar prospecto", status_code=303)
 
 @app.post("/prospectos/{prospecto_id}/asignar")
@@ -1374,6 +1689,10 @@ async def registrar_interaccion(
         # Actualizar estado del prospecto si hay cambio
         if cambio_estado:
             prospecto.estado = cambio_estado
+            
+            # ✅ NUEVO: Auto-poblar fecha_compra cuando se marca como GANADO
+            if cambio_estado == EstadoProspecto.GANADO.value and not prospecto.fecha_compra:
+                prospecto.fecha_compra = datetime.now().date()
         
         db.commit()
         
@@ -1416,10 +1735,13 @@ async def subir_documento(
             prospecto.agente_asignado_id != user.id):
             return RedirectResponse(url="/prospectos?error=No tiene permisos para este prospecto", status_code=303)
         
-        # Validar que sea PDF
-        if not archivo.filename.lower().endswith('.pdf'):
+        # Validar tipo de archivo
+        allowed_extensions = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+        file_ext = os.path.splitext(archivo.filename)[1].lower()
+        
+        if file_ext not in allowed_extensions:
             return RedirectResponse(
-                url=f"/prospectos/{prospecto_id}/seguimiento?error=Solo se permiten archivos PDF", 
+                url=f"/prospectos/{prospecto_id}/seguimiento?error=Solo se permiten archivos PDF, Office e imágenes",
                 status_code=303
             )
         
@@ -1703,6 +2025,104 @@ async def eliminar_usuario(
         db.rollback()
         print(f"❌ Error deleting user: {e}")
         return RedirectResponse(url="/usuarios?error=Error al eliminar usuario", status_code=303)
+
+@app.post("/usuarios/{usuario_id}/desactivar")
+async def desactivar_usuario(
+    request: Request,
+    usuario_id: int,
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Desactiva un usuario y reasigna sus prospectos activos a servicio_cliente"""
+    try:
+        # No permitir desactivar el propio usuario
+        if usuario_id == user.id:
+            return RedirectResponse(url="/usuarios?error=No puede desactivar su propio usuario", status_code=303)
+        
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+        if not usuario:
+            return RedirectResponse(url="/usuarios?error=Usuario no encontrado", status_code=303)
+        
+        if usuario.activo == 0:
+            return RedirectResponse(url="/usuarios?error=El usuario ya está inactivo", status_code=303)
+        
+        # Buscar usuario servicio_cliente
+        servicio_cliente = db.query(models.Usuario).filter(
+            models.Usuario.username == "servicio_cliente"
+        ).first()
+        
+        if not servicio_cliente:
+            return RedirectResponse(url="/usuarios?error=Usuario servicio_cliente no encontrado", status_code=303)
+        
+        # Reasignar prospectos activos
+        prospectos_activos = db.query(models.Prospecto).filter(
+            models.Prospecto.agente_asignado_id == usuario_id,
+            models.Prospecto.estado.in_([
+                EstadoProspecto.NUEVO.value,
+                EstadoProspecto.EN_SEGUIMIENTO.value,
+                EstadoProspecto.COTIZADO.value
+            ])
+        ).all()
+        
+        prospectos_reasignados = 0
+        for prospecto in prospectos_activos:
+            prospecto.agente_original_id = usuario_id
+            prospecto.agente_asignado_id = servicio_cliente.id
+            prospectos_reasignados += 1
+        
+        # Desactivar usuario
+        usuario.activo = 0
+        usuario.email = "servicioclientetravelhouse@gmail.com"
+        
+        db.commit()
+        
+        mensaje = f"Usuario desactivado correctamente. {prospectos_reasignados} prospectos reasignados a servicio_cliente"
+        return RedirectResponse(url=f"/usuarios?success={mensaje}", status_code=303)
+    
+    except Exception as e:
+        db.rollback()
+        print(f"Error desactivando usuario: {e}")
+        return RedirectResponse(url="/usuarios?error=Error al desactivar usuario", status_code=303)
+
+@app.post("/usuarios/{usuario_id}/reactivar")
+async def reactivar_usuario(
+    request: Request,
+    usuario_id: int,
+    email: str = Form(...),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Reactiva un usuario inactivo"""
+    try:
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+        if not usuario:
+            return RedirectResponse(url="/usuarios?error=Usuario no encontrado", status_code=303)
+        
+        if usuario.activo == 1:
+            return RedirectResponse(url="/usuarios?error=El usuario ya está activo", status_code=303)
+        
+        # Validar que el email no esté duplicado entre usuarios activos
+        email_existente = db.query(models.Usuario).filter(
+            models.Usuario.email == email,
+            models.Usuario.activo == 1,
+            models.Usuario.id != usuario_id
+        ).first()
+        
+        if email_existente:
+            return RedirectResponse(url="/usuarios?error=El email ya está en uso por otro usuario activo", status_code=303)
+        
+        # Reactivar usuario
+        usuario.activo = 1
+        usuario.email = email
+        
+        db.commit()
+        
+        return RedirectResponse(url="/usuarios?success=Usuario reactivado correctamente", status_code=303)
+    
+    except Exception as e:
+        db.rollback()
+        print(f"Error reactivando usuario: {e}")
+        return RedirectResponse(url="/usuarios?error=Error al reactivar usuario", status_code=303)
 
 # ========== HISTORIAL DE PROSPECTOS CERRADOS ==========
 
@@ -2025,6 +2445,8 @@ async def actualizar_viaje(
     pasajeros_ninos: int = Form(0),
     pasajeros_infantes: int = Form(0),
     telefono_secundario: str = Form(None),
+    fecha_nacimiento: str = Form(None),
+    numero_identificacion: str = Form(None),
     db: Session = Depends(database.get_db)
 ):
     user = await get_current_user(request, db)
@@ -2067,6 +2489,12 @@ async def actualizar_viaje(
         prospecto.pasajeros_ninos = pasajeros_ninos
         prospecto.pasajeros_infantes = pasajeros_infantes
         prospecto.telefono_secundario = telefono_secundario
+        
+        # Campos adicionales para clientes ganados
+        fecha_nacimiento_date = parsear_fecha(fecha_nacimiento) if fecha_nacimiento else None
+        if prospecto.estado == EstadoProspecto.GANADO.value or prospecto.estado == EstadoProspecto.VENTA_CANCELADA.value:
+            prospecto.fecha_nacimiento = fecha_nacimiento_date
+            prospecto.numero_identificacion = numero_identificacion
         
         # Registrar interacción automática
         interaccion = models.Interaccion(
@@ -2156,7 +2584,7 @@ async def prospectos_filtro_dashboard(
         if user.tipo_usuario == TipoUsuario.AGENTE.value:
             query = query.filter(models.EstadisticaCotizacion.agente_id == user.id)
             
-        titulo_filtro = "Prospectos Cotizados en el periodo"
+        titulo_filtro = "Prospectos que han sido cotizados en el periodo"
 
     elif (tipo_filtro == "estado" and valor_filtro in [
             EstadoProspecto.EN_SEGUIMIENTO.value, 
@@ -2208,7 +2636,10 @@ async def prospectos_filtro_dashboard(
             pass
             
     # Aplicar filtros específicos adicionales
-    if tipo_filtro == "estado":  # Solo queda NUEVO o cualquier otro no manejado arriba
+    # ✅ IMPORTANTE: No aplicar filtro de estado actual para cotizaciones
+    # porque ya se manejó arriba usando EstadisticaCotizacion
+    if tipo_filtro == "estado" and valor_filtro != EstadoProspecto.COTIZADO.value:
+        # Solo queda NUEVO o cualquier otro no manejado arriba
         query = query.filter(models.Prospecto.estado == valor_filtro)
         titulo_filtro = f"Prospectos en estado: {valor_filtro.replace('_', ' ').title()}"
         
@@ -2432,11 +2863,12 @@ async def estadisticas_cotizaciones(
         if user.tipo_usuario == TipoUsuario.AGENTE.value:
             resumen_agentes = resumen_agentes.filter(models.EstadisticaCotizacion.agente_id == user.id)
         
-        resumen_agentes = resumen_agentes.group_by(models.Usuario.username).all()
+        resumen_agentes = resumen_agentes.group_by(models.Usuario.id, models.Usuario.username).all()
         
-        # Obtener lista de agentes para filtro
+        # Obtener lista de agentes para filtro (solo activos)
         agentes = db.query(models.Usuario).filter(
-            models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value
+            models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value,
+            models.Usuario.activo == 1
         ).all()
         
         return templates.TemplateResponse("estadisticas_cotizaciones.html", {
@@ -2521,6 +2953,10 @@ async def api_check_inactivity(
 async def ver_notificaciones(
     request: Request,
     filtro_agente_id: str = Query(None),
+    filtro_tipo: str = Query(None),  # NUEVO
+    filtro_estado: str = Query(None),  # NUEVO
+    fecha_inicio: str = Query(None),  # NUEVO
+    fecha_fin: str = Query(None),  # NUEVO
     db: Session = Depends(database.get_db)
 ):
     user = await get_current_user(request, db)
@@ -2530,14 +2966,56 @@ async def ver_notificaciones(
     # Trigger inactividad check al cargar (para asegurar alertas frescas)
     check_inactivity(db)
     
-    query = db.query(models.Notificacion).filter(
-        models.Notificacion.leida == False
-    )
+    # Query base
+    query = db.query(models.Notificacion)
     
+    # Filtro por agente
     if user.tipo_usuario == TipoUsuario.AGENTE.value:
         query = query.filter(models.Notificacion.usuario_id == user.id)
     elif filtro_agente_id and filtro_agente_id != "todos":
         query = query.filter(models.Notificacion.usuario_id == int(filtro_agente_id))
+    
+    # NUEVO: Filtro por tipo
+    if filtro_tipo and filtro_tipo != "todos":
+        query = query.filter(models.Notificacion.tipo == filtro_tipo)
+    
+    # NUEVO: Filtro por estado
+    if filtro_estado:
+        if filtro_estado == "pendientes":
+            query = query.filter(models.Notificacion.leida == False)
+        elif filtro_estado == "leidas":
+            query = query.filter(models.Notificacion.leida == True)
+        elif filtro_estado == "vencidas":
+            query = query.filter(
+                models.Notificacion.leida == False,
+                models.Notificacion.fecha_programada.isnot(None),
+                models.Notificacion.fecha_programada < datetime.now()
+            )
+        elif filtro_estado == "proximas":
+            query = query.filter(
+                models.Notificacion.leida == False,
+                models.Notificacion.fecha_programada.isnot(None),
+                models.Notificacion.fecha_programada > datetime.now()
+            )
+    else:
+        # Por defecto, solo no leídas
+        query = query.filter(models.Notificacion.leida == False)
+    
+    # NUEVO: Filtro por rango de fechas
+    if fecha_inicio:
+        try:
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, "%d/%m/%Y")
+            query = query.filter(models.Notificacion.fecha_creacion >= fecha_inicio_dt)
+        except ValueError:
+            pass
+    
+    if fecha_fin:
+        try:
+            fecha_fin_dt = datetime.strptime(fecha_fin, "%d/%m/%Y")
+            fecha_fin_dt = fecha_fin_dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(models.Notificacion.fecha_creacion <= fecha_fin_dt)
+        except ValueError:
+            pass
         
     notificaciones = query.order_by(models.Notificacion.fecha_creacion.desc()).all()
     
@@ -2568,14 +3046,34 @@ async def ver_notificaciones(
             
     agentes = []
     if user.tipo_usuario in [TipoUsuario.ADMINISTRADOR.value, TipoUsuario.SUPERVISOR.value]:
-        agentes = db.query(models.Usuario).filter(models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value).all()
+        agentes = db.query(models.Usuario).filter(
+            models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value,
+            models.Usuario.activo == 1
+        ).all()
+    
+    # NUEVO: Obtener prospectos activos para el modal
+    prospectos_activos = []
+    if user.tipo_usuario == TipoUsuario.AGENTE.value:
+        prospectos_activos = db.query(models.Prospecto).filter(
+            models.Prospecto.agente_asignado_id == user.id,
+            models.Prospecto.estado.in_(['nuevo', 'en_seguimiento', 'cotizado'])
+        ).order_by(models.Prospecto.nombre).limit(50).all()
+    else:
+        prospectos_activos = db.query(models.Prospecto).filter(
+            models.Prospecto.estado.in_(['nuevo', 'en_seguimiento', 'cotizado'])
+        ).order_by(models.Prospecto.nombre).limit(100).all()
         
     return templates.TemplateResponse("notificaciones.html", {
         "request": request,
         "current_user": user,
         "notificaciones": notificaciones,
         "agentes": agentes,
-        "filtro_agente_id": filtro_agente_id
+        "filtro_agente_id": filtro_agente_id,
+        "filtro_tipo": filtro_tipo,
+        "filtro_estado": filtro_estado,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+        "prospectos_activos": prospectos_activos
     })
 
 @app.post("/notificaciones/{notificacion_id}/leer")
@@ -2590,6 +3088,987 @@ async def marcar_notificacion_leida(
         db.commit()
     
     return RedirectResponse(url="/notificaciones", status_code=303)
+
+# ========== API DE NOTIFICACIONES PUSH ==========
+
+@app.get("/api/notificaciones/pendientes")
+async def obtener_notificaciones_pendientes(
+    request: Request,
+    db: Session = Depends(database.get_db)
+):
+    """Devuelve notificaciones vencidas y no leídas para el usuario actual"""
+    user = await get_current_user(request, db)
+    if not user:
+        return JSONResponse(content={"notificaciones": []})
+    
+    ahora = datetime.now()
+    
+    # Buscar notificaciones programadas que ya vencieron y no han sido leídas
+    notificaciones = db.query(models.Notificacion).filter(
+        models.Notificacion.usuario_id == user.id,
+        models.Notificacion.leida == False,
+        models.Notificacion.fecha_programada.isnot(None),
+        models.Notificacion.fecha_programada <= ahora
+    ).order_by(models.Notificacion.fecha_programada.asc()).all()
+    
+    # Convertir a JSON
+    resultado = []
+    for n in notificaciones:
+        prospecto_nombre = "N/A"
+        if n.prospecto:
+            prospecto_nombre = f"{n.prospecto.nombre} {n.prospecto.apellido or ''}".strip()
+        
+        resultado.append({
+            "id": n.id,
+            "mensaje": n.mensaje,
+            "tipo": n.tipo,
+            "prospecto_id": n.prospecto_id,
+            "fecha_programada": n.fecha_programada.strftime("%d/%m/%Y %H:%M"),
+            "prospecto_nombre": prospecto_nombre
+        })
+    
+    return JSONResponse(content={"notificaciones": resultado})
+
+
+# ========== ENDPOINTS PARA NOTIFICACIONES MANUALES ==========
+
+@app.get("/api/buscar-prospecto-por-id")
+async def buscar_prospecto_por_id(
+    id: str = Query(...),
+    db: Session = Depends(database.get_db),
+    request: Request = None
+):
+    """Busca un prospecto por ID de Cliente o ID de Cotización"""
+    user = await get_current_user(request, db)
+    if not user:
+        return JSONResponse(content={"success": False, "error": "No autenticado"})
+    
+    try:
+        prospecto = None
+        
+        # Buscar por ID de Cliente (formato: CL-YYYYMMDD-XXXX)
+        if id.startswith('CL-'):
+            prospecto = db.query(models.Prospecto).filter(
+                models.Prospecto.id_cliente == id
+            ).first()
+        
+        # Buscar por ID de Cotización (formato: COT-YYYYMMDD-XXXX)
+        elif id.startswith('COT-'):
+            # Buscar en EstadisticaCotizacion
+            cotizacion = db.query(models.EstadisticaCotizacion).filter(
+                models.EstadisticaCotizacion.id_cotizacion == id
+            ).first()
+            
+            if cotizacion:
+                prospecto = cotizacion.prospecto
+        
+        # Si no tiene prefijo, intentar buscar como número de ID directo
+        else:
+            try:
+                prospecto_id = int(id)
+                prospecto = db.query(models.Prospecto).filter(
+                    models.Prospecto.id == prospecto_id
+                ).first()
+            except ValueError:
+                pass
+        
+        # Verificar permisos
+        if prospecto:
+            if user.tipo_usuario == TipoUsuario.AGENTE.value:
+                if prospecto.agente_asignado_id != user.id:
+                    return JSONResponse(content={
+                        "success": False, 
+                        "error": "No tienes permisos para ver este prospecto"
+                    })
+            
+            return JSONResponse(content={
+                "success": True,
+                "prospecto": {
+                    "id": prospecto.id,
+                    "id_cliente": prospecto.id_cliente,
+                    "nombre": prospecto.nombre,
+                    "apellido": prospecto.apellido or "",
+                    "destino": prospecto.destino or ""
+                }
+            })
+        else:
+            return JSONResponse(content={
+                "success": False,
+                "error": "Prospecto no encontrado"
+            })
+    
+    except Exception as e:
+        print(f"Error buscando prospecto: {e}")
+        return JSONResponse(content={
+            "success": False,
+            "error": "Error en la búsqueda"
+        })
+
+
+@app.post("/notificaciones/crear")
+async def crear_notificacion_manual(
+    request: Request,
+    mensaje: str = Form(...),
+    fecha_programada: str = Form(...),
+    prospecto_id: int = Form(None),
+    db: Session = Depends(database.get_db)
+):
+    user = await get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    try:
+        # Parsear fecha
+        fecha_prog = datetime.strptime(fecha_programada, "%Y-%m-%dT%H:%M")
+        
+        # Validar que la fecha sea futura
+        if fecha_prog <= datetime.now():
+            return RedirectResponse(
+                url="/notificaciones?error=La fecha debe ser futura", 
+                status_code=303
+            )
+        
+        # Crear notificación
+        notificacion = models.Notificacion(
+            usuario_id=user.id,
+            prospecto_id=prospecto_id if prospecto_id else None,
+            tipo="seguimiento",
+            mensaje=mensaje,
+            fecha_programada=fecha_prog,
+            leida=False,
+            email_enviado=False
+        )
+        
+        db.add(notificacion)
+        
+        # Si se asocia a un prospecto, crear interacción automática
+        if prospecto_id:
+            prospecto = db.query(models.Prospecto).filter(
+                models.Prospecto.id == prospecto_id
+            ).first()
+            
+            if prospecto:
+                # Formatear fecha para el comentario
+                fecha_formateada = fecha_prog.strftime("%d/%m/%Y a las %H:%M")
+                
+                # Crear interacción/comentario
+                interaccion = models.Interaccion(
+                    prospecto_id=prospecto_id,
+                    usuario_id=user.id,
+                    tipo_interaccion="sistema",
+                    descripcion=f"📅 Contacto programado para {fecha_formateada}\n{mensaje}",
+                    estado_anterior=prospecto.estado,
+                    estado_nuevo=prospecto.estado
+                )
+                
+                db.add(interaccion)
+        
+        db.commit()
+        
+        return RedirectResponse(
+            url="/notificaciones?success=Recordatorio creado correctamente", 
+            status_code=303
+        )
+    
+    except ValueError as e:
+        return RedirectResponse(
+            url="/notificaciones?error=Formato de fecha inválido", 
+            status_code=303
+        )
+    except Exception as e:
+        db.rollback()
+        print(f"Error creando notificación: {e}")
+        return RedirectResponse(
+            url="/notificaciones?error=Error al crear recordatorio", 
+            status_code=303
+        )
+
+
+# ========== EXPORTACIÓN DE DATOS A EXCEL ==========
+
+def generar_excel_prospectos(prospectos, filename="prospectos_export.xlsx"):
+    """
+    Genera archivo Excel con lista de prospectos
+    """
+    try:
+        # Preparar datos para DataFrame
+        data = []
+        for p in prospectos:
+            # Obtener última interacción
+            ultima_interaccion = ""
+            if p.interacciones:
+                ultima_int = p.interacciones[0]  # Ya está ordenado por fecha desc
+                ultima_interaccion = ultima_int.fecha_creacion.strftime("%d/%m/%Y %H:%M")
+            
+            data.append({
+                'ID Cliente': p.id_cliente or f"CL-{p.id:04d}",
+                'Nombre': p.nombre,
+                'Apellido': p.apellido,
+                'Teléfono': p.telefono or "",
+                'Teléfono Secundario': p.telefono_secundario or "",
+                'Email': p.correo_electronico or "",
+                'Ciudad Origen': p.ciudad_origen or "",
+                'Destino': p.destino or "",
+                'Fecha Ida': p.fecha_ida.strftime("%d/%m/%Y") if p.fecha_ida else "",
+                'Fecha Vuelta': p.fecha_vuelta.strftime("%d/%m/%Y") if p.fecha_vuelta else "",
+                'Adultos': p.pasajeros_adultos or 0,
+                'Niños': p.pasajeros_ninos or 0,
+                'Infantes': p.pasajeros_infantes or 0,
+                'Medio Ingreso': p.medio_ingreso.nombre if p.medio_ingreso else "",
+                'Agente Asignado': p.agente_asignado.username if p.agente_asignado else "Sin asignar",
+                'Estado': p.estado.replace("_", " ").title(),
+                'Fecha Registro': p.fecha_registro.strftime("%d/%m/%Y %H:%M"),
+                'Última Interacción': ultima_interaccion,
+                'Cliente Recurrente': "Sí" if p.cliente_recurrente else "No",
+                'Datos Completos': "Sí" if p.tiene_datos_completos else "No",
+                'Observaciones': p.observaciones or ""
+            })
+        
+        # Crear DataFrame
+        df = pd.DataFrame(data)
+        
+        # Crear archivo Excel en memoria
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Prospectos', index=False)
+            
+            # Obtener workbook y worksheet para formato
+            workbook = writer.book
+            worksheet = writer.sheets['Prospectos']
+            
+            # Formato de encabezados
+            from openpyxl.styles import Font, PatternFill, Alignment
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Auto-ajustar columnas
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+            
+            # Agregar filtros automáticos
+            worksheet.auto_filter.ref = worksheet.dimensions
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        print(f"❌ Error generando Excel de prospectos: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def generar_excel_estadisticas(stats, periodo, fecha_inicio, fecha_fin, filename="dashboard_export.xlsx"):
+    """
+    Genera archivo Excel con estadísticas del dashboard
+    Múltiples hojas: Resumen, Por Estado, Por Agente, Destinos
+    """
+    try:
+        output = io.BytesIO()
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Hoja 1: Resumen General
+            resumen_data = {
+                'Métrica': [
+                    'Periodo',
+                    'Fecha Inicio',
+                    'Fecha Fin',
+                    '',
+                    'Total Prospectos',
+                    'Prospectos con Datos Completos',
+                    'Prospectos sin Datos',
+                    'Clientes Sin Asignar',
+                    'Clientes Asignados',
+                    'Destinos Únicos',
+                    'Ventas Cerradas',
+                    '',
+                    'Prospectos Nuevos',
+                    'En Seguimiento',
+                    'Cotizados',
+                    'Ganados',
+                    'Perdidos',
+                    'Ventas Canceladas'
+                ],
+                'Valor': [
+                    periodo.title(),
+                    fecha_inicio.strftime("%d/%m/%Y"),
+                    fecha_fin.strftime("%d/%m/%Y"),
+                    '',
+                    stats.get('total_prospectos', 0),
+                    stats.get('prospectos_con_datos', 0),
+                    stats.get('prospectos_sin_datos', 0),
+                    stats.get('clientes_sin_asignar', 0),
+                    stats.get('clientes_asignados', 0),
+                    stats.get('destinos_count', 0),
+                    stats.get('ventas_count', 0),
+                    '',
+                    stats.get('prospectos_nuevos', 0),
+                    stats.get('prospectos_seguimiento', 0),
+                    stats.get('prospectos_cotizados', 0),
+                    stats.get('prospectos_ganados', 0),
+                    stats.get('prospectos_perdidos', 0),
+                    stats.get('ventas_canceladas', 0)
+                ]
+            }
+            df_resumen = pd.DataFrame(resumen_data)
+            df_resumen.to_excel(writer, sheet_name='Resumen General', index=False)
+            
+            # Hoja 2: Por Estado
+            estados_data = {
+                'Estado': ['Nuevo', 'En Seguimiento', 'Cotizado', 'Ganado', 'Perdido', 'Venta Cancelada'],
+                'Cantidad': [
+                    stats.get('prospectos_nuevos', 0),
+                    stats.get('prospectos_seguimiento', 0),
+                    stats.get('prospectos_cotizados', 0),
+                    stats.get('prospectos_ganados', 0),
+                    stats.get('prospectos_perdidos', 0),
+                    stats.get('ventas_canceladas', 0)
+                ]
+            }
+            df_estados = pd.DataFrame(estados_data)
+            df_estados.to_excel(writer, sheet_name='Por Estado', index=False)
+            
+            # Hoja 3: Por Agente
+            if stats.get('conversion_agentes'):
+                agentes_data = []
+                for agente in stats['conversion_agentes']:
+                    agentes_data.append({
+                        'Agente': agente['username'],
+                        'Total Prospectos': agente['total_prospectos'],
+                        'Cotizados': agente['cotizados'],
+                        'Ganados': agente['ganados'],
+                        'Tasa Conversión': f"{(agente['ganados'] / agente['total_prospectos'] * 100) if agente['total_prospectos'] > 0 else 0:.1f}%"
+                    })
+                df_agentes = pd.DataFrame(agentes_data)
+                df_agentes.to_excel(writer, sheet_name='Por Agente', index=False)
+            
+            # Hoja 4: Destinos Populares
+            if stats.get('destinos_populares'):
+                destinos_data = []
+                for destino, count in stats['destinos_populares']:
+                    destinos_data.append({
+                        'Destino': destino,
+                        'Cantidad': count
+                    })
+                df_destinos = pd.DataFrame(destinos_data)
+                df_destinos.to_excel(writer, sheet_name='Destinos Populares', index=False)
+            
+            # Aplicar formato a todas las hojas
+            from openpyxl.styles import Font, PatternFill, Alignment
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                
+                # Formato de encabezados
+                for cell in worksheet[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                
+                # Auto-ajustar columnas
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 40)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        print(f"❌ Error generando Excel de estadísticas: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def generar_excel_interacciones(interacciones, prospecto, filename="interacciones_export.xlsx"):
+    """
+    Genera archivo Excel con historial de interacciones
+    """
+    try:
+        data = []
+        for interaccion in interacciones:
+            data.append({
+                'Fecha': interaccion.fecha_creacion.strftime("%d/%m/%Y %H:%M"),
+                'Usuario': interaccion.usuario.username if interaccion.usuario else "Sistema",
+                'Tipo': interaccion.tipo_interaccion.replace("_", " ").title() if interaccion.tipo_interaccion else "General",
+                'Descripción': interaccion.descripcion,
+                'Estado Anterior': interaccion.estado_anterior.replace("_", " ").title() if interaccion.estado_anterior else "",
+                'Estado Nuevo': interaccion.estado_nuevo.replace("_", " ").title() if interaccion.estado_nuevo else ""
+            })
+        
+        df = pd.DataFrame(data)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Información del prospecto
+            info_data = {
+                'Campo': ['ID Cliente', 'Nombre', 'Teléfono', 'Email', 'Estado Actual'],
+                'Valor': [
+                    prospecto.id_cliente or f"CL-{prospecto.id:04d}",
+                    f"{prospecto.nombre} {prospecto.apellido}",
+                    prospecto.telefono or "",
+                    prospecto.correo_electronico or "",
+                    prospecto.estado.replace("_", " ").title()
+                ]
+            }
+            df_info = pd.DataFrame(info_data)
+            df_info.to_excel(writer, sheet_name='Información', index=False)
+            
+            # Historial de interacciones
+            df.to_excel(writer, sheet_name='Historial', index=False)
+            
+            # Aplicar formato
+            from openpyxl.styles import Font, PatternFill, Alignment
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                
+                for cell in worksheet[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 60)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        print(f"❌ Error generando Excel de interacciones: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# ========== ENDPOINTS DE EXPORTACIÓN ==========
+
+@app.get("/exportar/prospectos")
+async def exportar_prospectos(
+    request: Request,
+    destino: str = Query(None),
+    telefono: str = Query(None),
+    medio_ingreso_id: str = Query(None),
+    agente_asignado_id: str = Query(None),
+    estado: str = Query(None),
+    busqueda_global: str = Query(None),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(database.get_db)
+):
+    """Exporta prospectos a Excel con filtros aplicados"""
+    user = await get_current_user(request, db)
+    
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    try:
+        # Construir query base
+        query = db.query(models.Prospecto).filter(
+            models.Prospecto.fecha_eliminacion.is_(None)
+        )
+        
+        # Filtrar por agente si no es admin
+        if user.tipo_usuario not in [TipoUsuario.ADMINISTRADOR.value, TipoUsuario.SUPERVISOR.value]:
+            query = query.filter(models.Prospecto.agente_asignado_id == user.id)
+        
+        # Aplicar filtros
+        if destino:
+            query = query.filter(models.Prospecto.destino.ilike(f"%{destino}%"))
+        
+        if telefono:
+            telefono_normalizado = normalizar_numero(telefono)
+            query = query.filter(
+                or_(
+                    func.replace(func.replace(models.Prospecto.telefono, ' ', ''), '-', '').ilike(f"%{telefono_normalizado}%"),
+                    func.replace(func.replace(models.Prospecto.telefono_secundario, ' ', ''), '-', '').ilike(f"%{telefono_normalizado}%")
+                )
+            )
+        
+        if medio_ingreso_id and medio_ingreso_id != "todos":
+            query = query.filter(models.Prospecto.medio_ingreso_id == int(medio_ingreso_id))
+        
+        if agente_asignado_id and agente_asignado_id != "todos":
+            if agente_asignado_id == "sin_asignar":
+                query = query.filter(models.Prospecto.agente_asignado_id.is_(None))
+            else:
+                query = query.filter(models.Prospecto.agente_asignado_id == int(agente_asignado_id))
+        
+        if estado and estado != "todos":
+            query = query.filter(models.Prospecto.estado == estado)
+        
+        if busqueda_global:
+            busqueda = f"%{busqueda_global}%"
+            query = query.filter(
+                or_(
+                    models.Prospecto.nombre.ilike(busqueda),
+                    models.Prospecto.apellido.ilike(busqueda),
+                    models.Prospecto.telefono.ilike(busqueda),
+                    models.Prospecto.correo_electronico.ilike(busqueda),
+                    models.Prospecto.id_cliente.ilike(busqueda)
+                )
+            )
+        
+        # Filtros de fecha
+        if fecha_inicio:
+            try:
+                fecha_inicio_obj = datetime.strptime(fecha_inicio, "%d/%m/%Y").date()
+                fecha_inicio_dt = datetime.combine(fecha_inicio_obj, datetime.min.time())
+                query = query.filter(models.Prospecto.fecha_registro >= fecha_inicio_dt)
+            except ValueError:
+                pass
+        
+        if fecha_fin:
+            try:
+                fecha_fin_obj = datetime.strptime(fecha_fin, "%d/%m/%Y").date()
+                fecha_fin_dt = datetime.combine(fecha_fin_obj, datetime.max.time())
+                query = query.filter(models.Prospecto.fecha_registro <= fecha_fin_dt)
+            except ValueError:
+                pass
+        
+        # Ordenar y obtener resultados
+        prospectos = query.order_by(models.Prospecto.fecha_registro.desc()).limit(10000).all()
+        
+        # Generar Excel
+        excel_file = generar_excel_prospectos(prospectos)
+        
+        if not excel_file:
+            raise HTTPException(status_code=500, detail="Error generando archivo Excel")
+        
+        # Nombre del archivo con timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"prospectos_{timestamp}.xlsx"
+        
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        print(f"❌ Error exportando prospectos: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error al exportar datos")
+
+
+@app.get("/exportar/dashboard")
+async def exportar_dashboard(
+    request: Request,
+    periodo: str = Query("mes"),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Exporta estadísticas del dashboard a Excel (solo admins)"""
+    try:
+        # Calcular rango de fechas
+        fecha_inicio_obj, fecha_fin_obj = calcular_rango_fechas(periodo, fecha_inicio, fecha_fin)
+        
+        # Convertir a datetime
+        fecha_inicio_dt = datetime.combine(fecha_inicio_obj, datetime.min.time())
+        fecha_fin_dt = datetime.combine(fecha_fin_obj, datetime.max.time())
+        
+        # Recopilar estadísticas (similar al dashboard)
+        stats = {}
+        
+        # Total de prospectos
+        stats['total_prospectos'] = db.query(models.Prospecto).filter(
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Prospectos con/sin datos
+        stats['prospectos_con_datos'] = db.query(models.Prospecto).filter(
+            models.Prospecto.tiene_datos_completos == True,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['prospectos_sin_datos'] = db.query(models.Prospecto).filter(
+            models.Prospecto.tiene_datos_completos == False,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Clientes sin asignar
+        stats['clientes_sin_asignar'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.NUEVO.value,
+            models.Prospecto.agente_asignado_id == None,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Clientes asignados
+        stats['clientes_asignados'] = db.query(models.Prospecto).filter(
+            models.Prospecto.agente_asignado_id != None,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Destinos
+        destinos_query = db.query(models.Prospecto.destino).filter(
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt,
+            models.Prospecto.destino.isnot(None),
+            models.Prospecto.destino != ''
+        ).distinct().all()
+        stats['destinos_count'] = len(destinos_query)
+        
+        # Ventas
+        stats['ventas_count'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.GANADO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Por estado
+        stats['prospectos_nuevos'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.NUEVO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['prospectos_seguimiento'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.EN_SEGUIMIENTO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['prospectos_cotizados'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.COTIZADO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['prospectos_ganados'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.GANADO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['prospectos_perdidos'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.CERRADO_PERDIDO.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        stats['ventas_canceladas'] = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.VENTA_CANCELADA.value,
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt
+        ).count()
+        
+        # Destinos populares
+        stats['destinos_populares'] = db.query(
+            models.Prospecto.destino,
+            func.count(models.Prospecto.id).label('count')
+        ).filter(
+            models.Prospecto.fecha_registro >= fecha_inicio_dt,
+            models.Prospecto.fecha_registro <= fecha_fin_dt,
+            models.Prospecto.destino.isnot(None),
+            models.Prospecto.destino != ''
+        ).group_by(models.Prospecto.destino).order_by(func.count(models.Prospecto.id).desc()).limit(10).all()
+        
+        # Conversión por agente
+        conversion_agentes = []
+        agentes = db.query(models.Usuario).filter(
+            models.Usuario.tipo_usuario == TipoUsuario.AGENTE.value,
+            models.Usuario.activo == 1
+        ).all()
+        
+        for agente in agentes:
+            total_agente = db.query(models.Prospecto).filter(
+                models.Prospecto.agente_asignado_id == agente.id,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
+            ).count()
+            
+            ganados_agente = db.query(models.HistorialEstado).filter(
+                models.HistorialEstado.usuario_id == agente.id,
+                models.HistorialEstado.estado_nuevo == EstadoProspecto.GANADO.value,
+                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
+                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            ).count()
+            
+            cotizados_agente = db.query(models.EstadisticaCotizacion).filter(
+                models.EstadisticaCotizacion.agente_id == agente.id,
+                models.EstadisticaCotizacion.fecha_cotizacion >= fecha_inicio_obj,
+                models.EstadisticaCotizacion.fecha_cotizacion <= fecha_fin_obj
+            ).count()
+            
+            conversion_agentes.append({
+                'username': agente.username,
+                'total_prospectos': total_agente,
+                'cotizados': cotizados_agente,
+                'ganados': ganados_agente
+            })
+        
+        stats['conversion_agentes'] = conversion_agentes
+        
+        # Generar Excel
+        excel_file = generar_excel_estadisticas(stats, periodo, fecha_inicio_obj, fecha_fin_obj)
+        
+        if not excel_file:
+            raise HTTPException(status_code=500, detail="Error generando archivo Excel")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"dashboard_{timestamp}.xlsx"
+        
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        print(f"❌ Error exportando dashboard: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error al exportar estadísticas")
+
+
+@app.get("/exportar/interacciones/{prospecto_id}")
+async def exportar_interacciones(
+    prospecto_id: int,
+    request: Request,
+    db: Session = Depends(database.get_db)
+):
+    """Exporta historial de interacciones de un prospecto"""
+    user = await get_current_user(request, db)
+    
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    try:
+        # Obtener prospecto
+        prospecto = db.query(models.Prospecto).filter(models.Prospecto.id == prospecto_id).first()
+        
+        if not prospecto:
+            raise HTTPException(status_code=404, detail="Prospecto no encontrado")
+        
+        # Verificar permisos
+        if user.tipo_usuario not in [TipoUsuario.ADMINISTRADOR.value, TipoUsuario.SUPERVISOR.value]:
+            if prospecto.agente_asignado_id != user.id:
+                raise HTTPException(status_code=403, detail="No tiene permiso para ver este prospecto")
+        
+        # Obtener interacciones
+        interacciones = db.query(models.Interaccion).filter(
+            models.Interaccion.prospecto_id == prospecto_id
+        ).order_by(models.Interaccion.fecha_creacion.desc()).all()
+        
+        # Generar Excel
+        excel_file = generar_excel_interacciones(interacciones, prospecto)
+        
+        if not excel_file:
+            raise HTTPException(status_code=500, detail="Error generando archivo Excel")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        id_cliente = prospecto.id_cliente or f"CL-{prospecto.id:04d}"
+        filename = f"interacciones_{id_cliente}_{timestamp}.xlsx"
+        
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error exportando interacciones: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error al exportar interacciones")
+
+
+@app.get("/exportar/clientes-ganados")
+async def exportar_clientes_ganados(
+    request: Request,
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Exporta clientes ganados con datos completos (solo admins)"""
+    try:
+        # Query base
+        query = db.query(models.Prospecto).filter(
+            models.Prospecto.estado == EstadoProspecto.GANADO.value,
+            models.Prospecto.fecha_eliminacion.is_(None)
+        )
+        
+        # Filtros de fecha
+        if fecha_inicio:
+            try:
+                fecha_inicio_obj = datetime.strptime(fecha_inicio, "%d/%m/%Y").date()
+                fecha_inicio_dt = datetime.combine(fecha_inicio_obj, datetime.min.time())
+                query = query.filter(models.Prospecto.fecha_compra >= fecha_inicio_dt)
+            except ValueError:
+                pass
+        
+        if fecha_fin:
+            try:
+                fecha_fin_obj = datetime.strptime(fecha_fin, "%d/%m/%Y").date()
+                fecha_fin_dt = datetime.combine(fecha_fin_obj, datetime.max.time())
+                query = query.filter(models.Prospecto.fecha_compra <= fecha_fin_dt)
+            except ValueError:
+                pass
+        
+        # Obtener clientes ganados
+        clientes = query.order_by(models.Prospecto.fecha_compra.desc()).all()
+        
+        # Generar Excel
+        excel_file = generar_excel_prospectos(clientes)
+        
+        if not excel_file:
+            raise HTTPException(status_code=500, detail="Error generando archivo Excel")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"clientes_ganados_{timestamp}.xlsx"
+        
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        print(f"❌ Error exportando clientes ganados: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error al exportar clientes ganados")
+
+
+def generar_excel_usuarios(usuarios, filename="usuarios_export.xlsx"):
+    """
+    Genera archivo Excel con lista de usuarios del sistema
+    """
+    try:
+        data = []
+        for u in usuarios:
+            # Contar prospectos asignados
+            prospectos_count = len([p for p in u.prospectos if p.fecha_eliminacion is None]) if hasattr(u, 'prospectos') else 0
+            
+            data.append({
+                'ID': u.id,
+                'Username': u.username,
+                'Email': u.email,
+                'Tipo Usuario': u.tipo_usuario.title(),
+                'Estado': 'Activo' if u.activo else 'Inactivo',
+                'Fecha Creación': u.fecha_creacion.strftime("%d/%m/%Y %H:%M"),
+                'Prospectos Asignados': prospectos_count
+            })
+        
+        df = pd.DataFrame(data)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Usuarios', index=False)
+            
+            workbook = writer.book
+            worksheet = writer.sheets['Usuarios']
+            
+            from openpyxl.styles import Font, PatternFill, Alignment
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 40)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+            
+            worksheet.auto_filter.ref = worksheet.dimensions
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        print(f"❌ Error generando Excel de usuarios: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+@app.get("/exportar/usuarios")
+async def exportar_usuarios(
+    request: Request,
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Exporta lista de usuarios a Excel (solo admins)"""
+    try:
+        # Obtener todos los usuarios
+        usuarios = db.query(models.Usuario).order_by(models.Usuario.fecha_creacion.desc()).all()
+        
+        # Generar Excel
+        excel_file = generar_excel_usuarios(usuarios)
+        
+        if not excel_file:
+            raise HTTPException(status_code=500, detail="Error generando archivo Excel")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"usuarios_{timestamp}.xlsx"
+        
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        print(f"❌ Error exportando usuarios: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error al exportar usuarios")
 
 
 if __name__ == "__main__":

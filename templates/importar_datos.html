@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Datos - ZARITA!{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold"><i class="fas fa-file-excel me-2 text-success"></i>Importar Datos desde Excel</h2>
+            <p class="text-muted">Importa usuarios y prospectos masivamente desde archivos Excel</p>
+        </div>
+    </div>
+
+    <!-- Mensajes de resultado -->
+    {% if resultado_usuarios %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div
+                class="alert alert-{{ 'success' if resultado_usuarios.exitosos > 0 else 'warning' }} alert-dismissible fade show">
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <h5 class="alert-heading"><i class="fas fa-users me-2"></i>Resultado Importación de Usuarios</h5>
+                <p class="mb-2"><strong>✓ Usuarios creados:</strong> {{ resultado_usuarios.exitosos }}</p>
+                {% if resultado_usuarios.errores %}
+                <p class="mb-2"><strong>⚠ Errores:</strong> {{ resultado_usuarios.errores|length }}</p>
+                <details>
+                    <summary class="cursor-pointer">Ver detalles de errores</summary>
+                    <ul class="mt-2 mb-0">
+                        {% for error in resultado_usuarios.errores %}
+                        <li>Fila {{ error.fila }}: {{ error.error }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if resultado_prospectos %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div
+                class="alert alert-{{ 'success' if resultado_prospectos.exitosos > 0 else 'warning' }} alert-dismissible fade show">
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <h5 class="alert-heading"><i class="fas fa-user-tie me-2"></i>Resultado Importación de Prospectos</h5>
+                <p class="mb-2"><strong>✓ Prospectos creados:</strong> {{ resultado_prospectos.exitosos }}</p>
+                <p class="mb-2"><strong>🔄 Clientes recurrentes:</strong> {{ resultado_prospectos.recurrentes }}</p>
+                {% if resultado_prospectos.errores %}
+                <p class="mb-2"><strong>⚠ Errores:</strong> {{ resultado_prospectos.errores|length }}</p>
+                <details>
+                    <summary class="cursor-pointer">Ver detalles de errores</summary>
+                    <ul class="mt-2 mb-0">
+                        {% for error in resultado_prospectos.errores %}
+                        <li>Fila {{ error.fila }}: {{ error.error }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Importar Usuarios -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Importar Usuarios</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Carga usuarios desde un archivo Excel con las siguientes columnas:</p>
+                    <ul class="small mb-3">
+                        <li><strong>username</strong> (requerido)</li>
+                        <li><strong>email</strong> (requerido)</li>
+                        <li><strong>password</strong> (requerido)</li>
+                        <li><strong>tipo_usuario</strong> (requerido: administrador/supervisor/agente)</li>
+                        <li><strong>activo</strong> (opcional, default: 1)</li>
+                    </ul>
+
+                    <div class="mb-3">
+                        <a href="/descargar-plantilla/usuarios" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-download me-1"></i>Descargar Plantilla
+                        </a>
+                    </div>
+
+                    <form action="/importar-usuarios" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="archivoUsuarios" class="form-label">Seleccionar archivo Excel</label>
+                            <input type="file" class="form-control" id="archivoUsuarios" name="archivo"
+                                accept=".xlsx,.xls" required>
+                            <div class="form-text">Formatos aceptados: .xlsx, .xls</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-upload me-2"></i>Importar Usuarios
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Importar Prospectos -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-user-tie me-2"></i>Importar Prospectos</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Carga prospectos/clientes desde un archivo Excel con las siguientes columnas:
+                    </p>
+                    <ul class="small mb-3">
+                        <li><strong>telefono</strong> (requerido, sin caracteres especiales)</li>
+                        <li><strong>indicativo_telefono</strong> (opcional, default: 57)</li>
+                        <li><strong>nombre, apellido</strong> (opcionales)</li>
+                        <li><strong>correo_electronico</strong> (opcional, con validación)</li>
+                        <li><strong>ciudad_origen, destino</strong> (opcionales)</li>
+                        <li><strong>fecha_ida, fecha_vuelta</strong> (opcionales, DD/MM/YYYY)</li>
+                        <li><strong>pasajeros_adultos, pasajeros_ninos, pasajeros_infantes</strong> (opcionales)</li>
+                        <li><strong>medio_ingreso</strong> (opcional)</li>
+                        <li><strong>estado</strong> (opcional: nuevo/en_seguimiento/cotizado/ganado/cerrado_perdido)
+                        </li>
+                        <li><strong>observaciones, comentarios</strong> (opcionales)</li>
+                        <li><strong>agente_asignado</strong> (opcional, username)</li>
+                        <li><strong>fecha_nacimiento</strong> (opcional, DD/MM/YYYY, para clientes ganados)</li>
+                        <li><strong>numero_identificacion</strong> (opcional, cédula/pasaporte)</li>
+                        <li><strong>fecha_compra</strong> (opcional, DD/MM/YYYY, para ventas históricas)</li>
+                        <li><strong>direccion</strong> (opcional, dirección del cliente)</li>
+                    </ul>
+
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Nota:</strong> Si existe un prospecto con el mismo teléfono, se creará como cliente
+                        recurrente.
+                    </div>
+
+                    <div class="mb-3">
+                        <a href="/descargar-plantilla/prospectos" class="btn btn-outline-success btn-sm">
+                            <i class="fas fa-download me-1"></i>Descargar Plantilla
+                        </a>
+                    </div>
+
+                    <form action="/importar-prospectos" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="archivoProspectos" class="form-label">Seleccionar archivo Excel</label>
+                            <input type="file" class="form-control" id="archivoProspectos" name="archivo"
+                                accept=".xlsx,.xls" required>
+                            <div class="form-text">Formatos aceptados: .xlsx, .xls</div>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-upload me-2"></i>Importar Prospectos
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instrucciones adicionales -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Instrucciones</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Validaciones Aplicadas:</h6>
+                    <ul>
+                        <li><strong>Teléfonos:</strong> Se limpian automáticamente (se remueven espacios y caracteres
+                            especiales)</li>
+                        <li><strong>Emails:</strong> Se valida el formato y se convierten a minúsculas</li>
+                        <li><strong>Fechas:</strong> Soporta formatos DD/MM/YYYY y YYYY-MM-DD</li>
+                        <li><strong>Textos:</strong> Nombre, apellido, ciudad, destino y dirección se convierten a
+                            MAYÚSCULAS</li>
+                        <li><strong>Duplicados:</strong> Los usuarios duplicados se omiten. Los prospectos duplicados
+                            (mismo teléfono) se crean como clientes recurrentes</li>
+                        <li><strong>Ventas Históricas:</strong> Si el estado es "ganado" y no hay fecha_compra, se usa
+                            la fecha actual</li>
+                    </ul>
+
+                    <h6 class="mt-3">Recomendaciones:</h6>
+                    <ul>
+                        <li>Descarga las plantillas de ejemplo para ver el formato correcto</li>
+                        <li>Asegúrate de que las columnas tengan exactamente los nombres especificados</li>
+                        <li>Los campos marcados como "requeridos" no pueden estar vacíos</li>
+                        <li>Revisa los errores detallados si alguna fila no se importa correctamente</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    details summary {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    details summary:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}

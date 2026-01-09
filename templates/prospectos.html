@@ -5,9 +5,16 @@
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-3 mb-3 border-bottom">
     <h1 class="h2">Gestión de Prospectos</h1>
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProspecto">
-        Nuevo Prospecto
-    </button>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <a href="/exportar/prospectos?{{ request.url.query }}" class="btn btn-success" title="Exportar a Excel">
+                <i class="fas fa-file-excel"></i> Exportar a Excel
+            </a>
+        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProspecto">
+            <i class="fas fa-plus"></i> Nuevo Prospecto
+        </button>
+    </div>
 </div>
 
 <!-- Mensajes de éxito/error -->
@@ -104,6 +111,68 @@
             <div class="col-12 ms-auto text-end">
                 <span class="badge bg-white text-dark border">{{ prospectos|length }} / {{ total_registros }}</span>
             </div>
+        </form>
+    </div>
+</div>
+
+<!-- ✅ FILTROS DE FECHA - COMPACTO -->
+<div class="card mb-3 border-0 shadow-sm bg-light">
+    <div class="card-body py-2">
+        <form method="get" action="/prospectos" id="formFiltroFechas"
+            class="row row-cols-lg-auto g-2 align-items-center">
+            <div class="col-12">
+                <span class="fw-bold text-muted small me-2"><i class="fas fa-calendar-alt"></i></span>
+            </div>
+
+            <!-- Botones de Presets -->
+            <div class="col-12">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarHoy()"
+                        title="Hoy">Hoy</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarSemana()"
+                        title="Esta Semana">Semana</button>
+                    <button type="button" class="btn btn-secondary" onclick="filtrarMes()" title="Este Mes">Mes</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarTrimestre()"
+                        title="Trimestre">Trim.</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarAnio()"
+                        title="Este Año">Año</button>
+                </div>
+            </div>
+
+            <!-- Date Pickers Compactos -->
+            <div class="col-12">
+                <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="fecha_inicio"
+                    value="{{ fecha_inicio }}" title="Fecha inicio" style="max-width: 150px;">
+            </div>
+
+            <div class="col-12">
+                <input type="date" class="form-control form-control-sm" name="fecha_fin" id="fecha_fin"
+                    value="{{ fecha_fin }}" title="Fecha fin" style="max-width: 150px;">
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
+                    <i class="fas fa-filter"></i> Aplicar
+                </button>
+            </div>
+
+            <!-- Mantener otros filtros activos -->
+            {% if filtros_activos.estado and filtros_activos.estado != 'todos' %}
+            <input type="hidden" name="estado" value="{{ filtros_activos.estado }}">
+            {% endif %}
+            {% if filtros_activos.agente_asignado_id and filtros_activos.agente_asignado_id != 'todos' %}
+            <input type="hidden" name="agente_asignado_id" value="{{ filtros_activos.agente_asignado_id }}">
+            {% endif %}
+            {% if filtros_activos.destino %}
+            <input type="hidden" name="destino" value="{{ filtros_activos.destino }}">
+            {% endif %}
+            {% if filtros_activos.telefono %}
+            <input type="hidden" name="telefono" value="{{ filtros_activos.telefono }}">
+            {% endif %}
+            {% if filtros_activos.busqueda_global %}
+            <input type="hidden" name="busqueda_global" value="{{ filtros_activos.busqueda_global }}">
+            {% endif %}
+            <input type="hidden" name="limit" value="{{ limit }}">
         </form>
     </div>
 </div>
@@ -236,7 +305,11 @@
                                 </td>
                                 <td>
                                     <small class="text-muted">{{ prospecto.agente_asignado.username if
-                                        prospecto.agente_asignado else 'Sin asignar' }}</small>
+                                        prospecto.agente_asignado else 'Sin asignar' }}
+                                        {% if prospecto.agente_asignado and prospecto.agente_asignado.activo == 0 %}
+                                        <span class="badge bg-secondary">Inactivo</span>
+                                        {% endif %}
+                                    </small>
                                 </td>
                                 <td>
                                     <span class="badge {% if prospecto.estado == 'nuevo' %}bg-secondary
@@ -988,4 +1061,8 @@
         }
     });
 </script>
+
+<!-- ✅ FUNCIONES DE FILTRADO DE FECHAS -->
+<script src="/static/js/filtros_fecha.js"></script>
+
 {% endblock %}

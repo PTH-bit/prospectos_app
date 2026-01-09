@@ -241,6 +241,10 @@
                     </li>
                     {% if current_user.tipo_usuario == 'administrador' %}
                     <li class="nav-item">
+                        <a class="nav-link" href="/importar-datos"><i class="fas fa-file-import me-1"></i> Importar
+                            Datos</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/usuarios"><i class="fas fa-cog me-1"></i> Usuarios</a>
                     </li>
                     {% endif %}
@@ -281,6 +285,122 @@
                 });
             }
         });
+
+        // ========== SISTEMA DE NOTIFICACIONES PUSH ==========
+        {% if current_user %}
+        let notificacionesMostradas = new Set(); // Para evitar mostrar la misma notificación múltiples veces
+
+        async function verificarNotificaciones() {
+            try {
+                const response = await fetch('/api/notificaciones/pendientes');
+                const data = await response.json();
+
+                if (data.notificaciones && data.notificaciones.length > 0) {
+                    data.notificaciones.forEach(notif => {
+                        // Solo mostrar si no se ha mostrado antes en esta sesión
+                        if (!notificacionesMostradas.has(notif.id)) {
+                            mostrarNotificacionPopup(notif);
+                            notificacionesMostradas.add(notif.id);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error verificando notificaciones:', error);
+            }
+        }
+
+        function mostrarNotificacionPopup(notif) {
+            // Crear toast con Bootstrap
+            const toastHTML = `
+                <div class="toast align-items-center text-white bg-warning border-0 shadow-lg" role="alert" 
+                     data-notif-id="${notif.id}" style="min-width: 350px; max-width: 400px;">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>🔔 Recordatorio de Seguimiento</strong><br>
+                            <small>${notif.mensaje}</small><br>
+                            <small class="text-white-50">Programado: ${notif.fecha_programada}</small>
+                            ${notif.prospecto_id ? `<br><a href="/prospectos/${notif.prospecto_id}/seguimiento" class="text-white fw-bold"><u>📋 Ver Prospecto: ${notif.prospecto_nombre}</u></a>` : ''}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                                onclick="marcarNotificacionLeida(${notif.id})" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+
+            // Agregar al contenedor
+            const container = document.getElementById('notificaciones-container') || crearContenedorNotificaciones();
+            container.insertAdjacentHTML('beforeend', toastHTML);
+
+            // Mostrar el toast
+            const toastElement = container.lastElementChild;
+            const toast = new bootstrap.Toast(toastElement, { autohide: false });
+            toast.show();
+
+            // Reproducir sonido
+            reproducirSonidoNotificacion();
+        }
+
+        function crearContenedorNotificaciones() {
+            const container = document.createElement('div');
+            container.id = 'notificaciones-container';
+            container.style.position = 'fixed';
+            container.style.top = '80px';
+            container.style.right = '20px';
+            container.style.zIndex = '9999';
+            document.body.appendChild(container);
+            return container;
+        }
+
+        async function marcarNotificacionLeida(notifId) {
+            try {
+                await fetch(`/notificaciones/${notifId}/leer`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    }
+                });
+
+                // Cerrar el toast
+                const toastElement = document.querySelector(`[data-notif-id="${notifId}"]`);
+                if (toastElement) {
+                    const toast = bootstrap.Toast.getInstance(toastElement);
+                    if (toast) toast.hide();
+                    setTimeout(() => toastElement.remove(), 300);
+                }
+            } catch (error) {
+                console.error('Error marcando notificación como leída:', error);
+            }
+        }
+
+        function reproducirSonidoNotificacion() {
+            // Sonido simple de notificación usando Web Audio API
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (e) {
+                console.log('No se pudo reproducir el sonido de notificación');
+            }
+        }
+
+        // Iniciar polling cada 60 segundos (1 minuto)
+        setInterval(verificarNotificaciones, 60000);
+
+        // Verificar inmediatamente al cargar la página
+        document.addEventListener('DOMContentLoaded', verificarNotificaciones);
+        {% endif %}
     </script>
 </body>
 

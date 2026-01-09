@@ -28,12 +28,13 @@
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Nombre</label>
-                            <input type="text" class="form-control" name="nombre" value="{{ prospecto.nombre or '' }}">
+                            <input type="text" class="form-control" name="nombre" value="{{ prospecto.nombre or '' }}"
+                                data-uppercase>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Apellido</label>
                             <input type="text" class="form-control" name="apellido"
-                                value="{{ prospecto.apellido or '' }}">
+                                value="{{ prospecto.apellido or '' }}" data-uppercase>
                         </div>
                     </div>
 
@@ -59,7 +60,7 @@
                         <div class="col-md-3">
                             <label class="form-label">Teléfono Principal *</label>
                             <input type="tel" class="form-control" name="telefono"
-                                value="{{ prospecto.telefono or '' }}" required>
+                                value="{{ prospecto.telefono or '' }}" required data-numeric>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Indicativo Secundario</label>
@@ -72,7 +73,7 @@
                         <div class="col-md-3">
                             <label class="form-label">Teléfono Secundario</label>
                             <input type="tel" class="form-control" name="telefono_secundario"
-                                value="{{ prospecto.telefono_secundario or '' }}">
+                                value="{{ prospecto.telefono_secundario or '' }}" data-numeric>
                         </div>
                     </div>
 
@@ -82,12 +83,12 @@
                         <div class="col-md-6">
                             <label class="form-label">Ciudad de Origen</label>
                             <input type="text" class="form-control" name="ciudad_origen"
-                                value="{{ prospecto.ciudad_origen or '' }}">
+                                value="{{ prospecto.ciudad_origen or '' }}" data-uppercase>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Destino</label>
-                            <input type="text" class="form-control" name="destino"
-                                value="{{ prospecto.destino or '' }}">
+                            <input type="text" class="form-control" name="destino" value="{{ prospecto.destino or '' }}"
+                                data-uppercase>
                         </div>
                     </div>
 
@@ -139,6 +140,66 @@
                         </select>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label">Estado</label>
+                        <select class="form-select" name="estado" id="estado">
+                            <option value="nuevo" {% if prospecto.estado=='nuevo' %}selected{% endif %}>Nuevo</option>
+                            <option value="en_seguimiento" {% if prospecto.estado=='en_seguimiento' %}selected{% endif
+                                %}>En Seguimiento</option>
+                            <option value="cotizado" {% if prospecto.estado=='cotizado' %}selected{% endif %}>Cotizado
+                            </option>
+                            <option value="ganado" {% if prospecto.estado=='ganado' %}selected{% endif %}>Ganado
+                            </option>
+                            <option value="cerrado_perdido" {% if prospecto.estado=='cerrado_perdido' %}selected{% endif
+                                %}>Perdido</option>
+                            {% if prospecto.estado == 'ganado' or prospecto.estado_anterior == 'ganado' or
+                            prospecto.estado == 'venta_cancelada' %}
+                            <option value="venta_cancelada" {% if prospecto.estado=='venta_cancelada' %}selected{% endif
+                                %}>Venta Cancelada</option>
+                            {% endif %}
+                        </select>
+                        <div class="form-text">
+                            {% if prospecto.estado == 'ganado' or prospecto.estado_anterior == 'ganado' %}
+                            <i class="fas fa-info-circle"></i> La opción "Venta Cancelada" está disponible porque este
+                            prospecto fue GANADO.
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Campos adicionales para clientes GANADOS -->
+                    <div id="campos-cliente-ganado"
+                        style="display: {% if prospecto.estado == 'ganado' or prospecto.estado == 'venta_cancelada' or prospecto.estado_anterior == 'ganado' %}block{% else %}none{% endif %};">
+                        <div class="alert alert-success">
+                            <i class="fas fa-star"></i> <strong>Cliente Ganado</strong> - Puedes registrar información
+                            adicional del cliente
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Fecha de Nacimiento (Opcional)</label>
+                                <input type="date" class="form-control" name="fecha_nacimiento"
+                                    value="{% if prospecto.fecha_nacimiento %}{{ prospecto.fecha_nacimiento.strftime('%Y-%m-%d') }}{% endif %}">
+                                <div class="form-text">Información para personalización de servicios</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Número de Identificación (Opcional)</label>
+                                <input type="text" class="form-control" name="numero_identificacion"
+                                    value="{{ prospecto.numero_identificacion or '' }}" maxlength="50"
+                                    placeholder="Cédula, Pasaporte, etc." data-numeric>
+                                <div class="form-text">Documento de identidad del cliente</div>
+                            </div>
+                        </div>
+
+                        <!-- ✅ NUEVO: Campo Dirección -->
+                        <div class="mb-3">
+                            <label class="form-label">Dirección (Opcional)</label>
+                            <input type="text" class="form-control" name="direccion"
+                                value="{{ prospecto.direccion or '' }}" maxlength="255"
+                                placeholder="Dirección completa del cliente" data-uppercase>
+                            <div class="form-text">Dirección de residencia o envío</div>
+                        </div>
+                    </div>
+
                     <div class="mb-4">
                         <label class="form-label">Observaciones</label>
                         <textarea class="form-control" name="observaciones"
@@ -170,6 +231,37 @@
             locale: "es",
             allowInput: true
         });
+
+        // ✅ VALIDACIÓN EN TIEMPO REAL: Auto-uppercase para campos de texto
+        document.querySelectorAll('input[data-uppercase]').forEach(input => {
+            input.addEventListener('input', function (e) {
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.toUpperCase();
+                this.setSelectionRange(start, end);
+            });
+        });
+
+        // ✅ VALIDACIÓN EN TIEMPO REAL: Solo números para campos numéricos
+        document.querySelectorAll('input[data-numeric]').forEach(input => {
+            input.addEventListener('input', function (e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        });
+
+        // Mostrar/ocultar campos de cliente ganado según estado
+        const estadoSelect = document.getElementById('estado');
+        const camposClienteGanado = document.getElementById('campos-cliente-ganado');
+
+        if (estadoSelect && camposClienteGanado) {
+            estadoSelect.addEventListener('change', function () {
+                if (this.value === 'ganado' || this.value === 'venta_cancelada') {
+                    camposClienteGanado.style.display = 'block';
+                } else {
+                    camposClienteGanado.style.display = 'none';
+                }
+            });
+        }
     });
 </script>
 {% endblock %}

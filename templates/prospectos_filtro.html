@@ -8,9 +8,17 @@
         <h1 class="h2">{{ titulo_filtro }}</h1>
         <p class="text-muted mb-0">Total: {{ total_prospectos }} prospectos</p>
     </div>
-    <div>
-        <a href="/dashboard" class="btn btn-secondary">Volver al Dashboard</a>
-        <a href="/prospectos" class="btn btn-primary">Ver todos los prospectos</a>
+    <div class="btn-toolbar">
+        <div class="btn-group me-2">
+            <a href="/exportar/prospectos?tipo_filtro={{ tipo_filtro }}&valor_filtro={{ valor_filtro }}&periodo={{ periodo_activo }}&fecha_inicio={{ fecha_inicio_activa or '' }}&fecha_fin={{ fecha_fin_activa or '' }}"
+                class="btn btn-success btn-sm" title="Exportar a Excel">
+                <i class="fas fa-file-excel"></i> Exportar a Excel
+            </a>
+        </div>
+        <div class="btn-group">
+            <a href="/dashboard" class="btn btn-secondary btn-sm">Volver al Dashboard</a>
+            <a href="/prospectos" class="btn btn-primary btn-sm">Ver todos los prospectos</a>
+        </div>
     </div>
 </div>
 

@@ -17,18 +17,29 @@
             </span>
             <span class="badge rounded-pill bg-light text-dark border me-2">
                 <i class="fas fa-user-tie text-muted me-1"></i> {{ prospecto.agente_asignado.username }}
+                {% if prospecto.agente_asignado.activo == 0 %}
+                <span class="badge bg-secondary ms-1">Inactivo</span>
+                {% endif %}
             </span>
             <span class="badge rounded-pill bg-soft-info text-info border">
                 ID Cliente: {{ prospecto.id_cliente or 'N/A' }}
+            </span>
+            <span class="badge rounded-pill bg-soft-warning text-warning border">
+                ID Cotización: {{ prospecto.id_cotizacion or 'N/A' }}
             </span>
         </div>
         <div class="mt-1 small text-muted">
             <span class="me-2">ID Sistema: #{{ prospecto.id }}</span>
         </div>
     </div>
-    <div>
-        <a href="/prospectos" class="btn btn-outline-secondary btn-sm rounded-pill"><i
-                class="fas fa-arrow-left me-1"></i> Volver</a>
+    <div class="d-flex gap-2">
+        <a href="/prospectos" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="fas fa-arrow-left me-1"></i> Volver
+        </a>
+        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" data-bs-toggle="modal"
+            data-bs-target="#modalEditarViaje">
+            <i class="fas fa-edit me-1"></i> Editar Datos
+        </button>
     </div>
 </div>
 
@@ -82,12 +93,17 @@
                             <div class="col-md-4">
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Cambiar Estado</label>
-                                    <select class="form-select border-0 shadow-sm" name="cambio_estado">
+                                    <select class="form-select border-0 shadow-sm" name="cambio_estado"
+                                        id="cambio_estado">
                                         <option value="">-- Mantener estado actual --</option>
                                         <option value="en_seguimiento">🔄 En Seguimiento</option>
                                         <option value="cotizado">💰 Cotizado</option>
                                         <option value="ganado">✅ Ganado</option>
                                         <option value="cerrado_perdido">❌ Cerrar (Perdido)</option>
+                                        {% if prospecto.estado == 'ganado' or prospecto.estado_anterior == 'ganado' or
+                                        prospecto.estado == 'venta_cancelada' %}
+                                        <option value="venta_cancelada">🚫 Venta Cancelada</option>
+                                        {% endif %}
                                     </select>
                                 </div>
                             </div>
@@ -168,8 +184,9 @@
             <div class="card-body">
                 <form method="post" action="/prospectos/{{ prospecto.id }}/documento" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label class="form-label small text-muted">Subir Documento (PDF)</label>
-                        <input type="file" class="form-control form-control-sm" name="archivo" accept=".pdf" required>
+                        <label class="form-label small text-muted">Subir Documento (PDF, Office, Imágenes)</label>
+                        <input type="file" class="form-control form-control-sm" name="archivo"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.bmp,.webp" required>
                     </div>
 
                     <div class="mb-3">
@@ -177,6 +194,10 @@
                         <select class="form-select form-select-sm" name="tipo_documento">
                             <option value="cotizacion">📄 Cotización</option>
                             <option value="contrato">📑 Contrato</option>
+                            <option value="factura_proveedor">🧾 Factura Proveedor</option>
+                            <option value="reserva_proveedor">📋 Reserva Proveedor</option>
+                            <option value="pago_cliente">💵 Pago de Cliente</option>
+                            <option value="pago_proveedor">💳 Pago al Proveedor</option>
                             <option value="otro">📎 Otro</option>
                         </select>
                     </div>
@@ -218,7 +239,13 @@
         <!-- Información del Prospecto -->
         <div class="card border-0 shadow-sm border-top border-4 border-info">
             <div class="card-body">
-                <h6 class="card-title fw-bold text-dark mb-3">Información del Cliente</h6>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title fw-bold text-dark mb-0">Información del Cliente</h6>
+                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill"
+                        onclick="copiarDatosCotizacion(event)" title="Copiar datos para Excel">
+                        <i class="fas fa-copy me-1"></i> Copiar
+                    </button>
+                </div>
 
                 <div class="mb-3">
                     <label class="small text-muted d-block">WhatsApp / Teléfono</label>
@@ -273,175 +300,260 @@
             </div>
         </div>
     </div>
-    <!-- ✅ NUEVA SECCIÓN: Editar Información de Viaje -->
-    <div class="card mt-4 border-0 shadow-sm" id="editar-viaje">
-        <div class="card-header">
-            <h6 class="card-title mb-0">✏️ Editar Información de Viaje</h6>
-        </div>
-        <div class="card-body">
-            <form method="post" action="/prospectos/{{ prospecto.id }}/actualizar-viaje">
-                <!-- Nombre y Apellido -->
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Nombre</label>
-                            <input type="text" class="form-control" name="nombre" value="{{ prospecto.nombre or '' }}"
-                                placeholder="Nombre del cliente">
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Apellido</label>
-                            <input type="text" class="form-control" name="apellido"
-                                value="{{ prospecto.apellido or '' }}" placeholder="Apellido del cliente">
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Email -->
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" name="correo_electronico"
-                                value="{{ prospecto.correo_electronico or '' }}" placeholder="Email del cliente">
-                        </div>
-                    </div>
-                </div>
+    <!-- Script section starts here -->
+    <!-- ✅ AGREGAR DATEPICKER -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Mostrar loading en formularios
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function () {
+                    const submitBtn = this.querySelector('button[type="submit"]');
+                    if (submitBtn && !submitBtn.disabled) {
+                        const originalText = submitBtn.innerHTML;
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+                        submitBtn.disabled = true;
 
-                <!-- Teléfonos - Fila 1: Teléfono Principal -->
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="mb-3">
-                            <label class="form-label">Indicativo Principal</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">+</span>
-                                <input type="text" class="form-control" name="indicativo_telefono"
-                                    value="{{ prospecto.indicativo_telefono or '57' }}" placeholder="57"
-                                    pattern="[0-9]{1,4}">
+                        // Restaurar después de 5 segundos por si hay error
+                        setTimeout(() => {
+                            submitBtn.innerHTML = originalText;
+                            submitBtn.disabled = false;
+                        }, 5000);
+                    }
+                });
+            });
+
+            // Mostrar/ocultar campos de cliente ganado según estado seleccionado
+            const estadoSelect = document.getElementById('cambio_estado');
+            const camposClienteGanado = document.getElementById('campos-cliente-ganado');
+
+            if (estadoSelect && camposClienteGanado) {
+                estadoSelect.addEventListener('change', function () {
+                    if (this.value === 'ganado' || this.value === 'venta_cancelada') {
+                        camposClienteGanado.style.display = 'block';
+                    } else if (this.value !== '') {
+                        // Solo ocultar si se selecciona otro estado (no si está vacío)
+                        camposClienteGanado.style.display = 'none';
+                    }
+                });
+            }
+
+            // Función para copiar datos de cotización
+            function copiarDatosCotizacion(event) {
+                const datos = `ID Cliente\t{{ prospecto.id_cliente or 'N/A' }}
+ID Cotización\t{{ prospecto.id_cotizacion or 'N/A' }}
+Nombre\t{{ prospecto.nombre }} {{ prospecto.apellido }}
+Teléfono\t+{{ prospecto.indicativo_telefono }} {{ prospecto.telefono }}
+Email\t{{ prospecto.correo_electronico or 'N/A' }}
+Origen\t{{ prospecto.ciudad_origen or 'N/A' }}
+Destino\t{{ prospecto.destino or 'N/A' }}
+Fecha Ida\t{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%d/%m/%Y') }}{% else %}N/A{% endif %}
+Fecha Vuelta\t{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%d/%m/%Y') }}{% else %}N/A{% endif %}
+Pasajeros\t{{ prospecto.pasajeros_adultos }} adultos, {{ prospecto.pasajeros_ninos }} niños, {{ prospecto.pasajeros_infantes }} infantes
+Estado\t{{ prospecto.estado|replace('_', ' ')|title }}
+Fecha Nacimiento\t{% if prospecto.fecha_nacimiento %}{{ prospecto.fecha_nacimiento.strftime('%d/%m/%Y') }}{% else %}N/A{% endif %}
+Número Identificación\t{{ prospecto.numero_identificacion or 'N/A' }}
+Dirección\t{{ prospecto.direccion or 'N/A' }}`;
+
+                navigator.clipboard.writeText(datos).then(() => {
+                    // Mostrar confirmación
+                    const btn = event.target.closest('button');
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i> Copiado!';
+                    btn.classList.remove('btn-outline-info');
+                    btn.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.classList.remove('btn-success');
+                        btn.classList.add('btn-outline-info');
+                    }, 2000);
+                }).catch(err => {
+                    alert('Error al copiar: ' + err);
+                });
+            }
+
+            // Hacer función global
+            window.copiarDatosCotizacion = copiarDatosCotizacion;
+        });
+    </script>
+
+    <!-- Modal Editar Viaje -->
+    <div class="modal fade" id="modalEditarViaje" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-edit me-2"></i>Editar Datos del Prospecto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <form action="/prospectos/{{ prospecto.id }}/editar" method="POST" id="formEditarModal">
+                    <div class="modal-body p-4" style="max-height: 70vh; overflow-y: auto;">
+                        <!-- Información Personal -->
+                        <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">Información Personal</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nombre *</label>
+                                <input type="text" class="form-control" name="nombre" value="{{ prospecto.nombre }}"
+                                    required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Apellido *</label>
+                                <input type="text" class="form-control" name="apellido" value="{{ prospecto.apellido }}"
+                                    required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Email</label>
+                                <input type="email" class="form-control" name="correo_electronico"
+                                    value="{{ prospecto.correo_electronico or '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Indicativo *</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono"
+                                        value="{{ prospecto.indicativo_telefono or '57' }}" required
+                                        pattern="[0-9]{1,4}">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Teléfono *</label>
+                                <input type="text" class="form-control" name="telefono"
+                                    value="{{ prospecto.telefono or '' }}" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Indicativo 2</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">+</span>
+                                    <input type="text" class="form-control" name="indicativo_telefono_secundario"
+                                        value="{{ prospecto.indicativo_telefono_secundario or '57' }}"
+                                        pattern="[0-9]{1,4}">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Teléfono 2</label>
+                                <input type="text" class="form-control" name="telefono_secundario"
+                                    value="{{ prospecto.telefono_secundario or '' }}">
                             </div>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="mb-3">
-                            <label class="form-label">Teléfono Principal</label>
-                            <input type="tel" class="form-control form-control-sm" name="telefono"
-                                value="{{ prospecto.telefono or '' }}" placeholder="Ej: 3001234567">
-                        </div>
-                    </div>
 
-                    <!-- Teléfono Secundario -->
-                    <div class="col-md-3">
-                        <div class="mb-3">
-                            <label class="form-label">Indicativo Secundario</label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">+</span>
-                                <input type="text" class="form-control" name="indicativo_telefono_secundario"
-                                    value="{{ prospecto.indicativo_telefono_secundario or '57' }}" placeholder="57"
-                                    pattern="[0-9]{1,4}">
+                        <!-- Campos Condicionales para Cliente GANADO -->
+                        <div id="camposClienteGanadoModal"
+                            style="display: {% if prospecto.estado == 'ganado' or prospecto.estado == 'venta_cancelada' or prospecto.estado_anterior == 'ganado' %}block{% else %}none{% endif %};">
+                            <h6 class="text-success fw-bold border-bottom pb-2 mb-3 mt-4">
+                                <i class="fas fa-star me-2"></i>Información Adicional (Cliente Ganado)
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Fecha de Nacimiento</label>
+                                    <input type="date" class="form-control" name="fecha_nacimiento"
+                                        value="{% if prospecto.fecha_nacimiento %}{{ prospecto.fecha_nacimiento.strftime('%Y-%m-%d') }}{% endif %}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Número de Identificación</label>
+                                    <input type="text" class="form-control" name="numero_identificacion"
+                                        value="{{ prospecto.numero_identificacion or '' }}" maxlength="50"
+                                        placeholder="Cédula, Pasaporte, etc." data-numeric>
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Dirección</label>
+                                    <input type="text" class="form-control" name="direccion"
+                                        value="{{ prospecto.direccion or '' }}" maxlength="255"
+                                        placeholder="Dirección completa del cliente" data-uppercase>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="mb-3">
-                            <label class="form-label">Teléfono Secundario</label>
-                            <input type="tel" class="form-control form-control-sm" name="telefono_secundario"
-                                value="{{ prospecto.telefono_secundario or '' }}" placeholder="Teléfono adicional">
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Origen y Destino -->
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Ciudad de Origen</label>
-                            <input type="text" class="form-control" name="ciudad_origen"
-                                value="{{ prospecto.ciudad_origen or '' }}" placeholder="Ciudad de origen">
+                        <!-- Datos del Viaje -->
+                        <h6 class="text-primary fw-bold border-bottom pb-2 mb-3 mt-4">Detalles del Viaje</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Origen</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light text-primary"><i
+                                            class="fas fa-plane-departure"></i></span>
+                                    <input type="text" class="form-control" name="ciudad_origen"
+                                        value="{{ prospecto.ciudad_origen or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Destino</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light text-primary"><i
+                                            class="fas fa-plane-arrival"></i></span>
+                                    <input type="text" class="form-control" name="destino"
+                                        value="{{ prospecto.destino or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Fecha Ida</label>
+                                <input type="date" class="form-control" name="fecha_ida"
+                                    value="{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%Y-%m-%d') }}{% endif %}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Fecha Vuelta</label>
+                                <input type="date" class="form-control" name="fecha_vuelta"
+                                    value="{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%Y-%m-%d') }}{% endif %}">
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Destino</label>
-                            <input type="text" class="form-control" name="destino" value="{{ prospecto.destino or '' }}"
-                                placeholder="Destino del viaje">
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Fechas -->
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Fecha Ida (dd/mm/aaaa)</label>
-                            <input type="text" class="form-control date-picker-input" name="fecha_ida"
-                                value="{% if prospecto.fecha_ida %}{{ prospecto.fecha_ida.strftime('%d/%m/%Y') }}{% endif %}"
-                                placeholder="dd/mm/aaaa">
+                        <!-- Pasajeros y Presupuesto -->
+                        <h6 class="text-primary fw-bold border-bottom pb-2 mb-3 mt-4">Pasajeros y Observaciones</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Adultos</label>
+                                <input type="number" class="form-control" name="pasajeros_adultos"
+                                    value="{{ prospecto.pasajeros_adultos or 1 }}" min="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Niños</label>
+                                <input type="number" class="form-control" name="pasajeros_ninos"
+                                    value="{{ prospecto.pasajeros_ninos or 0 }}" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Infantes</label>
+                                <input type="number" class="form-control" name="pasajeros_infantes"
+                                    value="{{ prospecto.pasajeros_infantes or 0 }}" min="0">
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">Observaciones</label>
+                                <textarea class="form-control" name="observaciones" rows="3"
+                                    placeholder="Notas adicionales sobre el viaje">{{ prospecto.observaciones or '' }}</textarea>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Fecha Vuelta (dd/mm/aaaa)</label>
-                            <input type="text" class="form-control date-picker-input" name="fecha_vuelta"
-                                value="{% if prospecto.fecha_vuelta %}{{ prospecto.fecha_vuelta.strftime('%d/%m/%Y') }}{% endif %}"
-                                placeholder="dd/mm/aaaa">
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Pasajeros -->
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label class="form-label">Adultos</label>
-                            <input type="number" class="form-control" name="pasajeros_adultos"
-                                value="{{ prospecto.pasajeros_adultos or 1 }}" min="1">
-                        </div>
+                        <!-- Campos ocultos requeridos -->
+                        <input type="hidden" name="medio_ingreso_id" value="{{ prospecto.medio_ingreso_id }}">
+                        <input type="hidden" name="estado" value="{{ prospecto.estado }}">
                     </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label class="form-label">Niños</label>
-                            <input type="number" class="form-control" name="pasajeros_ninos"
-                                value="{{ prospecto.pasajeros_ninos or 0 }}" min="0">
-                        </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-outline-secondary rounded-pill"
+                            data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">
+                            <i class="fas fa-save me-2"></i>Guardar Cambios
+                        </button>
                     </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label class="form-label">Infantes</label>
-                            <input type="number" class="form-control" name="pasajeros_infantes"
-                                value="{{ prospecto.pasajeros_infantes or 0 }}" min="0">
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-warning">
-                    <i class="fas fa-save"></i> Actualizar Información de Viaje
-                </button>
-            </form>
+                </form>
+            </div>
         </div>
     </div>
-</div>
-<!-- ✅ AGREGAR DATEPICKER -->
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        // Mostrar loading en formularios
-        const forms = document.querySelectorAll('form');
-        forms.forEach(form => {
-            form.addEventListener('submit', function () {
-                const submitBtn = this.querySelector('button[type="submit"]');
-                if (submitBtn && !submitBtn.disabled) {
-                    const originalText = submitBtn.innerHTML;
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
-                    submitBtn.disabled = true;
 
-                    // Restaurar después de 5 segundos por si hay error
-                    setTimeout(() => {
-                        submitBtn.innerHTML = originalText;
-                        submitBtn.disabled = false;
-                    }, 5000);
+    <script>
+        // Lógica para mostrar/ocultar campos de cliente ganado en el modal
+        document.addEventListener('DOMContentLoaded', function () {
+            const modalForm = document.getElementById('formEditarModal');
+            if (modalForm) {
+                const estadoActual = '{{ prospecto.estado }}';
+                const estadoAnterior = '{{ prospecto.estado_anterior or "" }}';
+                const camposGanadoModal = document.getElementById('camposClienteGanadoModal');
+
+                // Mostrar campos si es ganado o venta_cancelada
+                if (camposGanadoModal && (estadoActual === 'ganado' || estadoActual === 'venta_cancelada' || estadoAnterior === 'ganado')) {
+                    camposGanadoModal.style.display = 'block';
                 }
-            });
+            }
         });
-    });
-</script>
-{% endblock %}
+    </script>
+
+    {% endblock %}

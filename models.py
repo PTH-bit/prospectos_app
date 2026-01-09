@@ -17,6 +17,16 @@ class EstadoProspecto(enum.Enum):
     COTIZADO = "cotizado"
     CERRADO_PERDIDO = "cerrado_perdido"
     GANADO = "ganado"
+    VENTA_CANCELADA = "venta_cancelada"
+
+class TipoDocumento(enum.Enum):
+    COTIZACION = "cotizacion"
+    CONTRATO = "contrato"
+    FACTURA_PROVEEDOR = "factura_proveedor"
+    RESERVA_PROVEEDOR = "reserva_proveedor"
+    PAGO_CLIENTE = "pago_cliente"
+    PAGO_PROVEEDOR = "pago_proveedor"
+    OTRO = "otro"
 
 class MedioIngreso(Base):
     __tablename__ = "medios_ingreso"
@@ -30,7 +40,7 @@ class Usuario(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    email = Column(String(100), nullable=False)
     hashed_password = Column(String(255), nullable=False)
     tipo_usuario = Column(String(20), nullable=False, default=TipoUsuario.AGENTE.value)
     activo = Column(Integer, default=1)
@@ -40,15 +50,14 @@ class Prospecto(Base):
     __tablename__ = "prospectos"
     
     id = Column(Integer, primary_key=True, index=True)
-    # ✅ NUEVO: ID de cliente único
-    id_cliente = Column(String(20), unique=True, nullable=True, index=True)
-    nombre = Column(String(100), nullable=True)
-    apellido = Column(String(100), nullable=True)
+    id_cliente = Column(String(20), unique=True, nullable=True)
+    nombre = Column(String(100), nullable=False)
+    apellido = Column(String(100), nullable=False)
     correo_electronico = Column(String(100))
     telefono = Column(String(20))
-    indicativo_telefono = Column(String(5), default="57")
+    indicativo_telefono = Column(String(10), default="57")
     telefono_secundario = Column(String(20), nullable=True)
-    indicativo_telefono_secundario = Column(String(5), default="57")
+    indicativo_telefono_secundario = Column(String(10), default="57")
     ciudad_origen = Column(String(100))
     destino = Column(String(100))
     fecha_ida = Column(Date)
@@ -60,15 +69,30 @@ class Prospecto(Base):
     observaciones = Column(Text)
     fecha_registro = Column(DateTime, default=datetime.now)
     agente_asignado_id = Column(Integer, ForeignKey("usuarios.id"))
+    agente_original_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     estado = Column(String(20), default=EstadoProspecto.NUEVO.value)
-    # ✅ NUEVO: Clasificación de datos
+    estado_anterior = Column(String(20), nullable=True)
     tiene_datos_completos = Column(Boolean, default=False)
     cliente_recurrente = Column(Boolean, default=False)
     prospecto_original_id = Column(Integer, ForeignKey("prospectos.id"), nullable=True)
     
+    # Nuevos campos para clientes ganados
+    fecha_nacimiento = Column(Date, nullable=True)
+    numero_identificacion = Column(String(50), nullable=True)
+    
+    # ✅ NUEVO: Fecha de compra (cuando se ganó la venta)
+    fecha_compra = Column(Date, nullable=True)
+    
+    # ✅ NUEVO: Dirección (solo para clientes ganados)
+    direccion = Column(String(255), nullable=True)
+    
+    # ✅ NUEVO: Soft Delete - Fecha de eliminación lógica
+    fecha_eliminacion = Column(DateTime, nullable=True)
+    
     # Relaciones
     medio_ingreso = relationship("MedioIngreso")
-    agente_asignado = relationship("Usuario")
+    agente_asignado = relationship("Usuario", foreign_keys=[agente_asignado_id])
+    agente_original = relationship("Usuario", foreign_keys=[agente_original_id])
     interacciones = relationship("Interaccion", back_populates="prospecto", order_by="desc(Interaccion.fecha_creacion)")
     documentos = relationship("Documento", back_populates="prospecto")
     

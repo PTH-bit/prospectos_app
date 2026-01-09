@@ -6,21 +6,95 @@
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-3 mb-3 border-bottom">
     <h1 class="h2 fw-bold text-primary">🔔 Centro de Notificaciones</h1>
 
-    {% if current_user.tipo_usuario in ['administrador', 'supervisor'] %}
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <form class="d-flex align-items-center" method="get" action="/notificaciones">
-            <span class="me-2 text-muted small">Filtrar por agente:</span>
-            <select class="form-select form-select-sm me-2" name="filtro_agente_id" onchange="this.form.submit()">
-                <option value="todos">Ver Todos</option>
-                {% for agente in agentes %}
-                <option value="{{ agente.id }}" {% if filtro_agente_id==agente.id|string %}selected{% endif %}>
-                    {{ agente.username }}
-                </option>
-                {% endfor %}
-            </select>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevaNotificacion">
+        <i class="fas fa-plus"></i> Nueva Notificación
+    </button>
+</div>
+
+<!-- Mensajes de éxito/error -->
+{% if request.query_params.get('success') %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="fas fa-check-circle"></i> {{ request.query_params.get('success') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if request.query_params.get('error') %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="fas fa-exclamation-circle"></i> {{ request.query_params.get('error') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Formulario de Filtros -->
+<div class="card mb-4 border-0 shadow-sm bg-light">
+    <div class="card-body py-3">
+        <form method="get" action="/notificaciones" class="row g-3">
+            <!-- Filtro por Tipo -->
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Tipo</label>
+                <select class="form-select form-select-sm" name="filtro_tipo">
+                    <option value="todos" {% if not filtro_tipo or filtro_tipo=='todos' %}selected{% endif %}>Todos
+                    </option>
+                    <option value="seguimiento" {% if filtro_tipo=='seguimiento' %}selected{% endif %}>🔔 Seguimiento
+                    </option>
+                    <option value="asignacion" {% if filtro_tipo=='asignacion' %}selected{% endif %}>👤 Asignación
+                    </option>
+                    <option value="inactividad" {% if filtro_tipo=='inactividad' %}selected{% endif %}>⚠️ Inactividad
+                    </option>
+                </select>
+            </div>
+
+            <!-- Filtro por Estado -->
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Estado</label>
+                <select class="form-select form-select-sm" name="filtro_estado">
+                    <option value="" {% if not filtro_estado %}selected{% endif %}>Pendientes</option>
+                    <option value="leidas" {% if filtro_estado=='leidas' %}selected{% endif %}>✅ Leídas</option>
+                    <option value="vencidas" {% if filtro_estado=='vencidas' %}selected{% endif %}>🔴 Vencidas</option>
+                    <option value="proximas" {% if filtro_estado=='proximas' %}selected{% endif %}>🟢 Próximas</option>
+                </select>
+            </div>
+
+            <!-- Filtro por Agente (solo admin/supervisor) -->
+            {% if current_user.tipo_usuario in ['administrador', 'supervisor'] %}
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Agente</label>
+                <select class="form-select form-select-sm" name="filtro_agente_id">
+                    <option value="todos">Todos</option>
+                    {% for agente in agentes %}
+                    <option value="{{ agente.id }}" {% if filtro_agente_id==agente.id|string %}selected{% endif %}>
+                        {{ agente.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <!-- Filtro por Fecha -->
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Desde</label>
+                <input type="text" class="form-control form-control-sm date-picker-input" name="fecha_inicio"
+                    value="{{ fecha_inicio or '' }}" placeholder="dd/mm/aaaa">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Hasta</label>
+                <input type="text" class="form-control form-control-sm date-picker-input" name="fecha_fin"
+                    value="{{ fecha_fin or '' }}" placeholder="dd/mm/aaaa">
+            </div>
+
+            <!-- Botones -->
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                    <i class="fas fa-filter"></i> Filtrar
+                </button>
+                <a href="/notificaciones" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                    <i class="fas fa-times"></i>
+                </a>
+            </div>
         </form>
     </div>
-    {% endif %}
 </div>
 
 <!-- KPIs Rápidos -->
@@ -33,7 +107,7 @@
                 </div>
                 <div>
                     <h3 class="mb-0 fw-bold">{{ notificaciones|length }}</h3>
-                    <small class="text-white-50">Pendientes</small>
+                    <small class="text-white-50">Mostradas</small>
                 </div>
             </div>
         </div>
@@ -135,6 +209,89 @@
     </div>
 </div>
 
+<!-- Modal: Nueva Notificación -->
+<div class="modal fade" id="modalNuevaNotificacion" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📝 Crear Notificación/Recordatorio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/notificaciones/crear" method="post">
+                <div class="modal-body">
+                    <!-- Mensaje -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mensaje *</label>
+                        <textarea class="form-control" name="mensaje" rows="3"
+                            placeholder="Ej: Llamar a cliente para confirmar reserva" required></textarea>
+                    </div>
+
+                    <!-- Fecha y Hora -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Fecha y Hora del Recordatorio *</label>
+                        <input type="datetime-local" class="form-control" name="fecha_programada" required>
+                        <small class="text-muted">
+                            Recibirás un popup automático cuando llegue esta fecha
+                        </small>
+                    </div>
+
+                    <!-- Búsqueda por ID -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Buscar Prospecto por ID (Opcional)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="buscarPorId"
+                                placeholder="CL-20260109-0001 o COT-20260109-0001">
+                            <button type="button" class="btn btn-outline-primary" onclick="buscarProspectoPorId()">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
+                        <small class="text-muted">
+                            Busca por ID de Cliente o ID de Cotización
+                        </small>
+                    </div>
+
+                    <!-- Resultado de búsqueda -->
+                    <div id="resultadoBusqueda" class="mb-3" style="display: none;">
+                        <div class="alert alert-success">
+                            <strong>✓ Prospecto encontrado:</strong>
+                            <div id="infoProspecto"></div>
+                        </div>
+                    </div>
+
+                    <!-- Prospecto (Opcional) - Ahora oculto, se llena con búsqueda -->
+                    <input type="hidden" name="prospecto_id" id="prospecto_id_hidden">
+
+                    <!-- O seleccionar de lista -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">O seleccionar de la lista</label>
+                        <select class="form-select" id="prospecto_select"
+                            onchange="seleccionarProspectoLista(this.value)">
+                            <option value="">Sin prospecto específico</option>
+                            {% for prospecto in prospectos_activos %}
+                            <option value="{{ prospecto.id }}"
+                                data-nombre="{{ prospecto.nombre }} {{ prospecto.apellido or '' }}"
+                                data-destino="{{ prospecto.destino or '' }}">
+                                {{ prospecto.id_cliente or 'Sin ID' }} -
+                                {{ prospecto.nombre }} {{ prospecto.apellido or '' }} -
+                                {{ prospecto.destino or '' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-bell"></i> Crear Recordatorio
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <style>
     .icon-shape.icon-sm {
         width: 32px;
@@ -142,4 +299,60 @@
         font-size: 0.9rem;
     }
 </style>
+
+<script>
+    async function buscarProspectoPorId() {
+        const idBusqueda = document.getElementById('buscarPorId').value.trim();
+        if (!idBusqueda) {
+            alert('Por favor ingresa un ID');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/buscar-prospecto-por-id?id=${encodeURIComponent(idBusqueda)}`);
+            const data = await response.json();
+
+            if (data.success && data.prospecto) {
+                // Mostrar resultado
+                document.getElementById('infoProspecto').innerHTML = `
+                <strong>${data.prospecto.id_cliente}</strong><br>
+                ${data.prospecto.nombre} ${data.prospecto.apellido}<br>
+                Destino: ${data.prospecto.destino || 'N/A'}
+            `;
+                document.getElementById('resultadoBusqueda').style.display = 'block';
+                document.getElementById('prospecto_id_hidden').value = data.prospecto.id;
+
+                // Limpiar select
+                document.getElementById('prospecto_select').value = '';
+            } else {
+                alert('No se encontró ningún prospecto con ese ID');
+                document.getElementById('resultadoBusqueda').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error buscando prospecto:', error);
+            alert('Error al buscar prospecto');
+        }
+    }
+
+    function seleccionarProspectoLista(prospectoId) {
+        if (prospectoId) {
+            const select = document.getElementById('prospecto_select');
+            const option = select.options[select.selectedIndex];
+
+            document.getElementById('infoProspecto').innerHTML = `
+            <strong>${option.text.split(' - ')[0]}</strong><br>
+            ${option.dataset.nombre}<br>
+            Destino: ${option.dataset.destino || 'N/A'}
+        `;
+            document.getElementById('resultadoBusqueda').style.display = 'block';
+            document.getElementById('prospecto_id_hidden').value = prospectoId;
+
+            // Limpiar campo de búsqueda
+            document.getElementById('buscarPorId').value = '';
+        } else {
+            document.getElementById('resultadoBusqueda').style.display = 'none';
+            document.getElementById('prospecto_id_hidden').value = '';
+        }
+    }
+</script>
 {% endblock %}

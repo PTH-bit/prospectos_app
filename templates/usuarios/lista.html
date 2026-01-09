@@ -5,9 +5,16 @@
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-3 mb-3 border-bottom">
     <h1 class="h2">Gestión de Usuarios</h1>
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalUsuario">
-        Nuevo Usuario
-    </button>
+    <div class="btn-toolbar">
+        <div class="btn-group me-2">
+            <a href="/exportar/usuarios" class="btn btn-success" title="Exportar Usuarios a Excel">
+                <i class="fas fa-file-excel"></i> Exportar a Excel
+            </a>
+        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalUsuario">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+        </button>
+    </div>
 </div>
 
 <!-- Mensajes de éxito/error -->
@@ -59,26 +66,35 @@
                                 </td>
                                 <td>{{ usuario.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</td>
                                 <td>
-                                    <span class="badge {% if usuario.activo %}bg-success{% else %}bg-secondary{% endif %}">
+                                    <span
+                                        class="badge {% if usuario.activo %}bg-success{% else %}bg-secondary{% endif %}">
                                         {% if usuario.activo %}Activo{% else %}Inactivo{% endif %}
                                     </span>
                                 </td>
                                 <td>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" 
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#modalEditarUsuario"
-                                            data-user-id="{{ usuario.id }}"
-                                            data-username="{{ usuario.username }}"
-                                            data-email="{{ usuario.email }}"
-                                            data-tipo="{{ usuario.tipo_usuario }}">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                        data-bs-target="#modalEditarUsuario" data-user-id="{{ usuario.id }}"
+                                        data-username="{{ usuario.username }}" data-email="{{ usuario.email }}"
+                                        data-tipo="{{ usuario.tipo_usuario }}">
                                         Editar
                                     </button>
                                     {% if usuario.id != current_user.id %}
-                                    <button type="button" class="btn btn-sm btn-outline-danger" 
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#modalEliminarUsuario"
-                                            data-user-id="{{ usuario.id }}"
-                                            data-username="{{ usuario.username }}">
+                                    {% if usuario.activo %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal"
+                                        data-bs-target="#modalDesactivarUsuario" data-user-id="{{ usuario.id }}"
+                                        data-username="{{ usuario.username }}">
+                                        Desactivar
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal"
+                                        data-bs-target="#modalReactivarUsuario" data-user-id="{{ usuario.id }}"
+                                        data-username="{{ usuario.username }}">
+                                        Reactivar
+                                    </button>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal"
+                                        data-bs-target="#modalEliminarUsuario" data-user-id="{{ usuario.id }}"
+                                        data-username="{{ usuario.username }}">
                                         Eliminar
                                     </button>
                                     {% endif %}
@@ -202,37 +218,120 @@
     </div>
 </div>
 
+<!-- Modal para desactivar usuario -->
+<div class="modal fade" id="modalDesactivarUsuario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">Desactivar Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="" id="formDesactivarUsuario">
+                <div class="modal-body">
+                    <p>¿Está seguro que desea desactivar al usuario <strong id="userToDeactivate"></strong>?</p>
+                    <div class="alert alert-info">
+                        <strong>Al desactivar este usuario:</strong>
+                        <ul class="mb-0">
+                            <li>Se marcará como inactivo</li>
+                            <li>Sus prospectos activos se reasignarán a "servicio_cliente"</li>
+                            <li>Se mantendrá el historial del agente original</li>
+                            <li>No aparecerá en las estadísticas del dashboard</li>
+                        </ul>
+                    </div>
+                    <p class="text-muted">Podrá reactivar este usuario más tarde si es necesario.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Desactivar Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para reactivar usuario -->
+<div class="modal fade" id="modalReactivarUsuario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Reactivar Usuario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="" id="formReactivarUsuario">
+                <div class="modal-body">
+                    <p>Reactivar al usuario <strong id="userToReactivate"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Nuevo Email *</label>
+                        <input type="email" class="form-control" name="email" required
+                            placeholder="usuario@ejemplo.com">
+                        <div class="form-text">Ingrese un email válido para el usuario reactivado</div>
+                    </div>
+                    <div class="alert alert-warning">
+                        <strong>Nota:</strong> Los prospectos que fueron reasignados NO se recuperarán automáticamente.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Reactivar Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Modal de edición
-    const modalEditar = document.getElementById('modalEditarUsuario');
-    modalEditar.addEventListener('show.bs.modal', function(event) {
-        const button = event.relatedTarget;
-        const userId = button.getAttribute('data-user-id');
-        const username = button.getAttribute('data-username');
-        const email = button.getAttribute('data-email');
-        const tipo = button.getAttribute('data-tipo');
-        
-        document.getElementById('editUsername').value = username;
-        document.getElementById('editEmail').value = email;
-        document.getElementById('editTipoUsuario').value = tipo;
-        
-        document.getElementById('formEditarUsuario').action = `/usuarios/${userId}/editar`;
+    document.addEventListener('DOMContentLoaded', function () {
+        // Modal de edición
+        const modalEditar = document.getElementById('modalEditarUsuario');
+        modalEditar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const userId = button.getAttribute('data-user-id');
+            const username = button.getAttribute('data-username');
+            const email = button.getAttribute('data-email');
+            const tipo = button.getAttribute('data-tipo');
+
+            document.getElementById('editUsername').value = username;
+            document.getElementById('editEmail').value = email;
+            document.getElementById('editTipoUsuario').value = tipo;
+
+            document.getElementById('formEditarUsuario').action = `/usuarios/${userId}/editar`;
+        });
+
+        // Modal de eliminación
+        const modalEliminar = document.getElementById('modalEliminarUsuario');
+        modalEliminar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const userId = button.getAttribute('data-user-id');
+            const username = button.getAttribute('data-username');
+
+            document.getElementById('userToDelete').textContent = username;
+            document.getElementById('formEliminarUsuario').action = `/usuarios/${userId}/eliminar`;
+        });
+
+        // Modal de desactivación
+        const modalDesactivar = document.getElementById('modalDesactivarUsuario');
+        modalDesactivar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const userId = button.getAttribute('data-user-id');
+            const username = button.getAttribute('data-username');
+
+            document.getElementById('userToDeactivate').textContent = username;
+            document.getElementById('formDesactivarUsuario').action = `/usuarios/${userId}/desactivar`;
+        });
+
+        // Modal de reactivación
+        const modalReactivar = document.getElementById('modalReactivarUsuario');
+        modalReactivar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const userId = button.getAttribute('data-user-id');
+            const username = button.getAttribute('data-username');
+
+            document.getElementById('userToReactivate').textContent = username;
+            document.getElementById('formReactivarUsuario').action = `/usuarios/${userId}/reactivar`;
+        });
     });
-    
-    // Modal de eliminación
-    const modalEliminar = document.getElementById('modalEliminarUsuario');
-    modalEliminar.addEventListener('show.bs.modal', function(event) {
-        const button = event.relatedTarget;
-        const userId = button.getAttribute('data-user-id');
-        const username = button.getAttribute('data-username');
-        
-        document.getElementById('userToDelete').textContent = username;
-        document.getElementById('formEliminarUsuario').action = `/usuarios/${userId}/eliminar`;
-    });
-});
 </script>
 {% endblock %}
