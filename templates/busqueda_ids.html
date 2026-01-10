@@ -18,6 +18,9 @@
                 <select class="form-select" name="tipo_id">
                     <option value="cliente" {% if tipo_id_activo=='cliente' %}selected{% endif %}>ID Cliente (CL-)
                     </option>
+                    <option value="solicitud" {% if tipo_id_activo=='solicitud' %}selected{% endif %}>ID Solicitud
+                        (SOL-)
+                    </option>
                     <option value="cotizacion" {% if tipo_id_activo=='cotizacion' %}selected{% endif %}>ID Cotización
                         (COT-)</option>
                     <option value="documento" {% if tipo_id_activo=='documento' %}selected{% endif %}>ID Documento
@@ -54,6 +57,7 @@
                 <thead class="table-dark">
                     <tr>
                         <th>ID Cliente</th>
+                        <th>ID Solicitud</th>
                         <th>Nombre</th>
                         <th>Contacto</th>
                         <th>Destino</th>
@@ -66,6 +70,9 @@
                     <tr>
                         <td>
                             <span class="badge bg-secondary font-monospace">{{ prospecto.id_cliente or 'N/A' }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-success font-monospace">{{ prospecto.id_solicitud or 'N/A' }}</span>
                         </td>
                         <td>
                             <div class="fw-bold">{{ prospecto.nombre }} {{ prospecto.apellido }}</div>

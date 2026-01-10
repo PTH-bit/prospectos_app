@@ -6,6 +6,8 @@ from datetime import date
 
 # Definir las columnas de la plantilla
 columnas = [
+    'id_cliente',  # ✅ NUEVO: ID del cliente (se reutiliza)
+    'id_solicitud',  # ✅ NUEVO: ID de la solicitud (único por caso)
     'telefono',
     'indicativo_telefono',
     'nombre',
@@ -26,15 +28,18 @@ columnas = [
     'fecha_nacimiento',
     'numero_identificacion',
     'fecha_compra',  # NUEVA COLUMNA
-    'direccion'  # NUEVA COLUMNA
+    'direccion',  # NUEVA COLUMNA
+    'empresa_segundo_titular'  # ✅ NUEVO: Empresa o segundo titular
 ]
 
 # Crear datos de ejemplo
 datos_ejemplo = [
     {
+        'id_cliente': '',  # ✅ Vacío: Se genera automáticamente
+        'id_solicitud': '',  # ✅ Vacío: Se genera automáticamente
         'telefono': '3001234567',
         'indicativo_telefono': '57',
-        'nombre': 'Juan',
+        'nombre': 'Juan',  # O puede usar: 'JUAN PEREZ||EMPRESA XYZ' para auto-parsear
         'apellido': 'Perez',
         'correo_electronico': 'juan.perez@email.com',
         'ciudad_origen': 'Bogota',
@@ -52,12 +57,15 @@ datos_ejemplo = [
         'fecha_nacimiento': '15/05/1985',
         'numero_identificacion': '1234567890',
         'fecha_compra': '',  # Vacio para prospectos nuevos
-        'direccion': ''  # Vacio para prospectos nuevos
+        'direccion': '',  # Vacio para prospectos nuevos
+        'empresa_segundo_titular': ''  # ✅ NUEVO: Empresa o segundo titular (o usar || en nombre)
     },
     {
+        'id_cliente': 'CL-20250105-0001',  # ✅ Ejemplo de ID existente
+        'id_solicitud': 'SOL-20250105-0001',  # ✅ Ejemplo de ID existente
         'telefono': '3009876543',
         'indicativo_telefono': '57',
-        'nombre': 'Maria',
+        'nombre': 'MARIA GONZALEZ||VIAJES COLOMBIA SAS',  # ✅ Ejemplo con separador ||
         'apellido': 'Gonzalez',
         'correo_electronico': 'maria.gonzalez@email.com',
         'ciudad_origen': 'Medellin',
@@ -75,7 +83,8 @@ datos_ejemplo = [
         'fecha_nacimiento': '20/08/1990',
         'numero_identificacion': '9876543210',
         'fecha_compra': '05/01/2025',  # Fecha historica de la venta
-        'direccion': 'CALLE 123 #45-67 APT 801'  # Direccion del cliente ganado
+        'direccion': 'CALLE 123 #45-67 APT 801',  # Direccion del cliente ganado
+        'empresa_segundo_titular': ''  # Se parseará automáticamente desde nombre
     }
 ]
 

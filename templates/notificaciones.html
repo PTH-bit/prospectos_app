@@ -84,6 +84,17 @@
                     value="{{ fecha_fin or '' }}" placeholder="dd/mm/aaaa">
             </div>
 
+            <!-- Límite de registros -->
+            <div class="col-md-1">
+                <label class="form-label small fw-bold">Por página</label>
+                <select class="form-select form-select-sm" name="limit" onchange="this.form.submit()">
+                    <option value="10" {% if limit==10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if limit==20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+
             <!-- Botones -->
             <div class="col-md-2 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-fill">
@@ -107,7 +118,7 @@
                 </div>
                 <div>
                     <h3 class="mb-0 fw-bold">{{ notificaciones|length }}</h3>
-                    <small class="text-white-50">Mostradas</small>
+                    <small class="text-white-50">de {{ total_notificaciones }}</small>
                 </div>
             </div>
         </div>
@@ -206,6 +217,29 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Paginación -->
+        {% if total_pages > 1 %}
+        <div class="p-3 border-top">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                        <a class="page-link"
+                            href="/notificaciones?page={{ page-1 }}&limit={{ limit }}&filtro_tipo={{ filtro_tipo or '' }}&filtro_estado={{ filtro_estado or '' }}&filtro_agente_id={{ filtro_agente_id or '' }}&fecha_inicio={{ fecha_inicio or '' }}&fecha_fin={{ fecha_fin or '' }}">Anterior</a>
+                    </li>
+
+                    <li class="page-item disabled">
+                        <span class="page-link">Página {{ page }} de {{ total_pages }}</span>
+                    </li>
+
+                    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                        <a class="page-link"
+                            href="/notificaciones?page={{ page+1 }}&limit={{ limit }}&filtro_tipo={{ filtro_tipo or '' }}&filtro_estado={{ filtro_estado or '' }}&filtro_agente_id={{ filtro_agente_id or '' }}&fecha_inicio={{ fecha_inicio or '' }}&fecha_fin={{ fecha_fin or '' }}">Siguiente</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -240,13 +274,13 @@
                         <label class="form-label fw-bold">Buscar Prospecto por ID (Opcional)</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="buscarPorId"
-                                placeholder="CL-20260109-0001 o COT-20260109-0001">
+                                placeholder="CL-... (Cliente), SOL-... (Solicitud) o COT-... (Cotización)">
                             <button type="button" class="btn btn-outline-primary" onclick="buscarProspectoPorId()">
                                 <i class="fas fa-search"></i> Buscar
                             </button>
                         </div>
                         <small class="text-muted">
-                            Busca por ID de Cliente o ID de Cotización
+                            Busca por ID de Cliente, ID de Solicitud o ID de Cotización
                         </small>
                     </div>
 
@@ -271,7 +305,7 @@
                             <option value="{{ prospecto.id }}"
                                 data-nombre="{{ prospecto.nombre }} {{ prospecto.apellido or '' }}"
                                 data-destino="{{ prospecto.destino or '' }}">
-                                {{ prospecto.id_cliente or 'Sin ID' }} -
+                                {{ prospecto.id_solicitud or prospecto.id_cliente or 'Sin ID' }} -
                                 {{ prospecto.nombre }} {{ prospecto.apellido or '' }} -
                                 {{ prospecto.destino or '' }}
                             </option>

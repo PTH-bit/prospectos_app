@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 import pandas as pd
+
 # Imports de módulos locales de la aplicación
 import models
 import database
@@ -21,78 +22,18 @@ import excel_import
 from models import TipoUsuario, EstadoProspecto
 from sqlalchemy import func, or_, and_
 from difflib import get_close_matches
-import smtplib
-from email.mime.text import MIMEText
-import re
 
+# Imports de utilidades locales
+from utils import (
+    parsear_fecha,
+    calcular_rango_fechas,
+    normalizar_fecha_input,
+    normalizar_texto_mayusculas,
+    normalizar_numero,
+    normalizar_email,
+    enviar_notificacion_email
+)
 
-
-
-def enviar_notificacion_email(destinatario: str, asunto: str, cuerpo: str):
-    """Envía una notificación por correo electrónico (Simulado por ahora)"""
-    try:
-        # En un entorno real, aquí se configurarían las credenciales SMTP
-        # server = smtplib.SMTP('smtp.gmail.com', 587)
-        # server.starttls()
-        # server.login("zaritahouse@gmail.com", "Travel2026/*")
-        # msg = MIMEText(cuerpo)
-        # msg['Subject'] = asunto
-        # msg['From'] = "sistema@prospectos.com"
-        # msg['To'] = destinatario
-        # server.send_message(msg)
-        # server.quit()
-        print(f"📧 [EMAIL SIMULADO] A: {destinatario} | Asunto: {asunto}")
-        return True
-    except Exception as e:
-        print(f"❌ Error enviando email: {e}")
-        return False
-
-def parsear_fecha(fecha_str: str) -> Optional[date]:
-    """Helper para parsear fechas en formatos DD/MM/YYYY o YYYY-MM-DD"""
-    if not fecha_str:
-        return None
-    try:
-        return datetime.strptime(fecha_str, "%d/%m/%Y").date()
-    except ValueError:
-        try:
-            return datetime.strptime(fecha_str, "%Y-%m-%d").date()
-        except ValueError:
-            print(f"⚠️ Error parseando fecha: {fecha_str}")
-            return None
-
-# ========== FUNCIONES DE NORMALIZACIÓN DE DATOS ==========
-
-def normalizar_texto_mayusculas(texto: str) -> Optional[str]:
-    """Convierte texto a mayúsculas y elimina espacios extras. Retorna None si vacío."""
-    if not texto or not str(texto).strip():
-        return None
-    return str(texto).strip().upper()
-
-def normalizar_numero(numero: str) -> str:
-    """Remueve espacios, guiones y símbolos de números. Solo deja dígitos."""
-    if not numero:
-        return ""
-    return re.sub(r'[^0-9]', '', str(numero))
-
-def normalizar_email(email: str) -> Optional[str]:
-    """Normaliza email a minúsculas y elimina espacios."""
-    if not email or not str(email).strip():
-        return None
-    return str(email).strip().lower()
-
-def normalizar_fecha_input(fecha_str: str) -> Optional[date]:
-    """Parsea fecha de input HTML (YYYY-MM-DD) o DD/MM/YYYY a objeto date."""
-    if not fecha_str or not str(fecha_str).strip():
-        return None
-    fecha_str = str(fecha_str).strip()
-    try:
-        return datetime.strptime(fecha_str, "%Y-%m-%d").date()
-    except ValueError:
-        try:
-            return datetime.strptime(fecha_str, "%d/%m/%Y").date()
-        except ValueError:
-            print(f"⚠️ Error parseando fecha: {fecha_str}")
-            return None
 
 app = FastAPI(title="Sistema de Prospectos")
 
@@ -108,12 +49,8 @@ templates = Jinja2Templates(directory="templates")
 active_sessions = {}
 
 # Crear tablas al inicio
-# Crear tablas al inicio
 @app.on_event("startup")
 def startup():
-    # Para desarrollo: resetear base de datos si es necesario
-    # database.reset_database()
-    
     database.create_tables()
     db = next(database.get_db())
     try:
@@ -193,6 +130,102 @@ async def require_admin(user: models.Usuario = Depends(get_current_user)):
     if not user or user.tipo_usuario != TipoUsuario.ADMINISTRADOR.value:
         raise HTTPException(status_code=403, detail="No tiene permisos de administrador")
     return user
+
+# ========== FUNCIÓN PARA NOTIFICACIONES AUTOMÁTICAS DE VIAJE ==========
+
+def crear_notificaciones_viaje(prospecto: models.Prospecto, db: Session):
+    """
+    Crea notificaciones automáticas para seguimiento de viaje.
+    
+    Genera 3 notificaciones:
+    - 45 días antes: Confirmar pagos y estado de reserva
+    - 10 días antes: Validar gestiones pre-viaje
+    - 2 días antes: Validar pre-viaje, formularios y gestiones finales
+    
+    Args:
+        prospecto: Objeto Prospecto con estado ganado
+        db: Sesión de base de datos
+    """
+    # Validar que tenga fecha_ida
+    if not prospecto.fecha_ida:
+        return
+    
+    # Validar que sea estado ganado
+    if prospecto.estado != EstadoProspecto.GANADO.value:
+        return
+    
+    hoy = datetime.now().date()
+    
+    # Eliminar notificaciones automáticas anteriores de este prospecto
+    db.query(models.Notificacion).filter(
+        models.Notificacion.prospecto_id == prospecto.id,
+        models.Notificacion.tipo == 'seguimiento_viaje'
+    ).delete()
+    
+    # Definir notificaciones
+    notificaciones_config = [
+        {
+            'dias_antes': 45,
+            'mensaje': f'Confirmar pagos y estado de reserva - Viaje a {prospecto.destino or "destino"}'
+        },
+        {
+            'dias_antes': 10,
+            'mensaje': f'Validar con cliente gestiones pre-viaje - Viaje a {prospecto.destino or "destino"}'
+        },
+        {
+            'dias_antes': 2,
+            'mensaje': f'Validar pre-viaje, formularios y gestiones finales - Viaje a {prospecto.destino or "destino"}'
+        }
+    ]
+    
+    # Crear notificaciones
+    for config in notificaciones_config:
+        fecha_notificacion = prospecto.fecha_ida - timedelta(days=config['dias_antes'])
+        
+        # Solo crear si la fecha es futura
+        if fecha_notificacion >= hoy:
+            nueva_notificacion = models.Notificacion(
+                prospecto_id=prospecto.id,
+                usuario_id=prospecto.agente_asignado_id,
+                tipo='seguimiento_viaje',
+                mensaje=config['mensaje'],
+                fecha_programada=datetime.combine(fecha_notificacion, datetime.min.time()),
+                leida=False,
+                email_enviado=False
+            )
+            db.add(nueva_notificacion)
+    
+    db.commit()
+
+# ========== FUNCIÓN PARA ORGANIZAR UPLOADS POR FECHA ==========
+
+def obtener_ruta_upload_por_fecha(fecha: datetime = None) -> str:
+    """
+    Genera la ruta de directorio para uploads basada en la fecha.
+    
+    Estructura: uploads/YYYY/MM/DD/
+    
+    Args:
+        fecha: Fecha para generar la ruta. Si es None, usa la fecha actual.
+    
+    Returns:
+        str: Ruta del directorio (ej: "uploads/2026/01/10/")
+    """
+    if fecha is None:
+        fecha = datetime.now()
+    
+    # Crear estructura: uploads/YYYY/MM/DD/
+    ruta = os.path.join(
+        UPLOAD_DIR,
+        str(fecha.year),
+        f"{fecha.month:02d}",
+        f"{fecha.day:02d}"
+    )
+    
+    # Crear directorios si no existen
+    os.makedirs(ruta, exist_ok=True)
+    
+    return ruta
 
 # Página de login
 @app.get("/", response_class=HTMLResponse)
@@ -732,51 +765,6 @@ async def dashboard(
         "conversion_agentes": conversion_agentes
     })
 
-def calcular_rango_fechas(periodo: str, fecha_inicio: str = None, fecha_fin: str = None):
-    """Calcula el rango de fechas según el periodo seleccionado"""
-    hoy = date.today()
-    
-    fecha_inicio_obj = hoy
-    fecha_fin_obj = hoy
-
-    if periodo == "personalizado" and fecha_inicio and fecha_fin:
-        # Usar fechas personalizadas
-        try:
-            fecha_inicio_obj = datetime.strptime(fecha_inicio, "%d/%m/%Y").date()
-            fecha_fin_obj = datetime.strptime(fecha_fin, "%d/%m/%Y").date()
-        except ValueError:
-            # Si hay error en el formato, usar mes actual por defecto
-            print("⚠️ Error en formato de fecha personalizada, usando mes actual")
-            pass
-    
-    elif periodo == "dia":
-        # Hoy
-        fecha_inicio_obj = hoy
-        fecha_fin_obj = hoy
-    elif periodo == "semana":
-        # Esta semana (lunes a domingo)
-        fecha_inicio_obj = hoy - timedelta(days=hoy.weekday())
-        fecha_fin_obj = fecha_inicio_obj + timedelta(days=6)
-    elif periodo == "año":
-        # Este año
-        fecha_inicio_obj = date(hoy.year, 1, 1)
-        fecha_fin_obj = date(hoy.year, 12, 31)
-    else:
-        # Mes actual (por defecto)
-        fecha_inicio_obj = date(hoy.year, hoy.month, 1)
-        if hoy.month == 12:
-            fecha_fin_obj = date(hoy.year + 1, 1, 1) - timedelta(days=1)
-        else:
-            fecha_fin_obj = date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
-    
-    # Convertir a datetime con horas inicio/fin del día
-    fecha_inicio_dt = datetime.combine(fecha_inicio_obj, datetime.min.time())
-    fecha_fin_dt = datetime.combine(fecha_fin_obj, datetime.max.time())
-    
-    return fecha_inicio_dt, fecha_fin_dt
-
-
-
 
 # ========== GESTIÓN DE PROSPECTOS (ACTUALIZADO) ==========
 
@@ -966,6 +954,7 @@ async def crear_prospecto(
     pasajeros_ninos: int = Form(0),
     pasajeros_infantes: int = Form(0),
     observaciones: str = Form(None),
+    empresa_segundo_titular: str = Form(None),  # ✅ NUEVO: Empresa o segundo titular
     telefono_secundario: str = Form(None),
     indicativo_telefono_secundario: str = Form("57"),
     forzar_nuevo: bool = Form(False),
@@ -1146,6 +1135,7 @@ async def crear_prospecto(
         ciudad_origen_normalizada = normalizar_texto_mayusculas(ciudad_origen)
         destino_normalizado = normalizar_texto_mayusculas(destino)
         email_normalizado = normalizar_email(email_final)
+        empresa_segundo_titular_normalizado = normalizar_texto_mayusculas(empresa_segundo_titular)  # ✅ NUEVO
         # observaciones NO se normalizan (mantener formato original)
         
         # Determinar si es cliente recurrente
@@ -1174,7 +1164,8 @@ async def crear_prospecto(
             # ✅ NUEVO: Copiar datos adicionales del cliente existente
             fecha_nacimiento=fecha_nacimiento_final,
             numero_identificacion=numero_identificacion_final,
-            direccion=direccion_final
+            direccion=direccion_final,
+            empresa_segundo_titular=empresa_segundo_titular_normalizado  # ✅ NUEVO
         )
         
         # ✅ VERIFICAR Y ASIGNAR DATOS COMPLETOS
@@ -1183,10 +1174,21 @@ async def crear_prospecto(
         db.add(prospecto)
         db.flush()  # Para obtener el ID antes del commit
         
-        # ✅ GENERAR ID DE CLIENTE ÚNICO
-        prospecto.generar_id_cliente()
+        # ✅ GENERAR IDs ÚNICOS
+        # 1. Reutilizar id_cliente si es cliente recurrente, sino generar nuevo
+        if todos_clientes_existentes and todos_clientes_existentes[0].id_cliente:
+            prospecto.id_cliente = todos_clientes_existentes[0].id_cliente
+            print(f"♻️ Reutilizando id_cliente: {prospecto.id_cliente}")
+        else:
+            prospecto.generar_id_cliente()
+            print(f"✅ Nuevo id_cliente generado: {prospecto.id_cliente}")
+        
+        # 2. Siempre generar nuevo id_solicitud (único por caso/viaje)
+        prospecto.generar_id_solicitud()
+        print(f"✅ Nuevo id_solicitud generado: {prospecto.id_solicitud}")
         
         db.commit()
+
         
         # Registrar interacción automática si es recurrente
         if cliente_recurrente:
@@ -1260,6 +1262,7 @@ async def editar_prospecto(
     pasajeros_ninos: int = Form(0),
     pasajeros_infantes: int = Form(0),
     observaciones: str = Form(None),
+    empresa_segundo_titular: str = Form(None),  # ✅ NUEVO: Empresa o segundo titular
     telefono_secundario: str = Form(None),
     indicativo_telefono_secundario: str = Form("57"),
     estado: str = Form(None),
@@ -1310,6 +1313,7 @@ async def editar_prospecto(
         email_normalizado = normalizar_email(correo_electronico)
         numero_identificacion_normalizado = normalizar_numero(numero_identificacion) if numero_identificacion else None
         direccion_normalizada = normalizar_texto_mayusculas(direccion)  # ✅ NUEVO
+        empresa_segundo_titular_normalizado = normalizar_texto_mayusculas(empresa_segundo_titular)  # ✅ NUEVO
         # observaciones NO se normalizan (mantener formato original)
         
         # Validar cambio de estado a VENTA_CANCELADA
@@ -1319,9 +1323,17 @@ async def editar_prospecto(
                 return RedirectResponse(url=redirect_url, status_code=303)
         
         # Guardar estado anterior si cambia
+        estado_cambio_a_ganado = False
         if estado and estado != prospecto.estado:
             prospecto.estado_anterior = prospecto.estado
             prospecto.estado = estado
+            # Detectar si cambió a ganado
+            if estado == EstadoProspecto.GANADO.value:
+                estado_cambio_a_ganado = True
+        
+        # Detectar si cambió fecha_ida
+        fecha_ida_original = prospecto.fecha_ida
+        fecha_ida_cambio = (fecha_ida_date != fecha_ida_original)
         
         # Actualizar datos del prospecto
         prospecto.nombre = nombre_normalizado  # ✅ NORMALIZADO A MAYÚSCULAS
@@ -1340,6 +1352,7 @@ async def editar_prospecto(
         prospecto.pasajeros_infantes = pasajeros_infantes
         prospecto.medio_ingreso_id = medio_ingreso_id
         prospecto.observaciones = observaciones  # ✅ SIN NORMALIZAR (mantener original)
+        prospecto.empresa_segundo_titular = empresa_segundo_titular_normalizado  # ✅ NUEVO
         
         # Campos adicionales para clientes GANADOS
         if prospecto.estado == EstadoProspecto.GANADO.value:
@@ -1348,6 +1361,11 @@ async def editar_prospecto(
             prospecto.direccion = direccion_normalizada  # ✅ NUEVO: MAYÚSCULAS
         
         db.commit()
+        
+        # ✅ NUEVO: Crear notificaciones automáticas de viaje
+        # Si cambió a ganado O si es ganado y cambió la fecha_ida
+        if estado_cambio_a_ganado or (prospecto.estado == EstadoProspecto.GANADO.value and fecha_ida_cambio and fecha_ida_date):
+            crear_notificaciones_viaje(prospecto, db)
         
         # Redirigir según origen
         if origen_solicitud == "seguimiento":
@@ -1661,30 +1679,27 @@ async def registrar_interaccion(
             except ValueError:
                 print(f"❌ Error formato fecha recordatorio: {fecha_proximo_contacto}")
         
-        # ✅ REGISTRAR ESTADÍSTICA DE COTIZACIÓN
+        # ✅ REGISTRAR ESTADÍSTICA DE COTIZACIÓN (SIEMPRE CREAR NUEVA)
         if (cambio_estado == EstadoProspecto.COTIZADO.value and 
             estado_anterior != EstadoProspecto.COTIZADO.value and
             prospecto.agente_asignado_id):
             
-            # Verificar si ya existe estadística para este prospecto
-            existe_estadistica = db.query(models.EstadisticaCotizacion).filter(
-                models.EstadisticaCotizacion.prospecto_id == prospecto_id
-            ).first()
+            # ✅ SIEMPRE CREAR NUEVA ESTADÍSTICA (permitir múltiples cotizaciones)
+            estadistica = models.EstadisticaCotizacion(
+                agente_id=prospecto.agente_asignado_id,
+                prospecto_id=prospecto_id,
+                fecha_cotizacion=datetime.now().date()
+            )
+            db.add(estadistica)
             
-            if existe_estadistica:
-                # Actualizar la fecha si ya existe (para asegurar que cuenta HOY)
-                existe_estadistica.fecha_cotizacion = datetime.now().date()
-            else:
-                estadistica = models.EstadisticaCotizacion(
-                    agente_id=prospecto.agente_asignado_id,
-                    prospecto_id=prospecto_id,
-                    fecha_cotizacion=datetime.now().date()
-                )
-                db.add(estadistica)
-                
-                # ✅ GENERAR ID DE COTIZACIÓN ÚNICO
-                db.flush()
-                estadistica.generar_id_cotizacion()
+            # ✅ GENERAR ID DE COTIZACIÓN ÚNICO
+            db.flush()
+            estadistica.generar_id_cotizacion()
+            
+            # ✅ ASIGNAR ID DE COTIZACIÓN AL PROSPECTO (última cotización)
+            prospecto.id_cotizacion = estadistica.id_cotizacion
+            print(f"✅ Nueva cotización generada al cambiar estado: {estadistica.id_cotizacion}")
+
         
         # Actualizar estado del prospecto si hay cambio
         if cambio_estado:
@@ -1779,26 +1794,23 @@ async def subir_documento(
             estado_anterior = prospecto.estado
             prospecto.estado = EstadoProspecto.COTIZADO.value
             
-            # ✅ REGISTRAR ESTADÍSTICA DE COTIZACIÓN
-            # Verificar si ya existe estadística para este prospecto
-            existe_estadistica = db.query(models.EstadisticaCotizacion).filter(
-                models.EstadisticaCotizacion.prospecto_id == prospecto_id
-            ).first()
+            # ✅ REGISTRAR NUEVA ESTADÍSTICA DE COTIZACIÓN (SIEMPRE CREAR NUEVA)
+            # Permitir múltiples cotizaciones por solicitud
+            estadistica = models.EstadisticaCotizacion(
+                agente_id=prospecto.agente_asignado_id or user.id,
+                prospecto_id=prospecto_id,
+                fecha_cotizacion=datetime.now().date()
+            )
+            db.add(estadistica)
+            db.flush()  # Para obtener el ID
             
-            if existe_estadistica:
-                # Actualizar la fecha si ya existe
-                existe_estadistica.fecha_cotizacion = datetime.now().date()
-            else:
-                estadistica = models.EstadisticaCotizacion(
-                    agente_id=prospecto.agente_asignado_id or user.id,
-                    prospecto_id=prospecto_id,
-                    fecha_cotizacion=datetime.now().date()
-                )
-                db.add(estadistica)
-                db.flush()  # Para obtener el ID
-                
-                # ✅ GENERAR ID DE COTIZACIÓN ÚNICO
-                estadistica.generar_id_cotizacion()
+            # ✅ GENERAR ID DE COTIZACIÓN ÚNICO
+            estadistica.generar_id_cotizacion()
+            
+            # ✅ ASIGNAR ID DE COTIZACIÓN AL PROSPECTO (última cotización)
+            prospecto.id_cotizacion = estadistica.id_cotizacion
+            print(f"✅ Nueva cotización generada: {estadistica.id_cotizacion}")
+
             
             # Registrar interacción automática de cambio de estado
             interaccion = models.Interaccion(
@@ -1844,7 +1856,7 @@ async def subir_documento(
 @app.get("/busqueda_ids", response_class=HTMLResponse)
 async def buscar_por_id(
     request: Request,
-    tipo_id: str = Query("cliente"),  # cliente, cotizacion, documento
+    tipo_id: str = Query("cliente"),  # cliente, solicitud, cotizacion, documento
     valor_id: str = Query(None),
     db: Session = Depends(database.get_db)
 ):
@@ -1859,11 +1871,18 @@ async def buscar_por_id(
         valor_id = valor_id.upper().strip()
         
         if tipo_id == "cliente":
-            # Buscar por ID de cliente
+            # Buscar por ID de cliente (puede traer múltiples solicitudes)
             resultados = db.query(models.Prospecto).filter(
                 models.Prospecto.id_cliente.ilike(f"%{valor_id}%")
             ).all()
             tipo_busqueda = f"Clientes con ID: {valor_id}"
+        
+        elif tipo_id == "solicitud":
+            # ✅ NUEVO: Buscar por ID de solicitud (único)
+            resultados = db.query(models.Prospecto).filter(
+                models.Prospecto.id_solicitud.ilike(f"%{valor_id}%")
+            ).all()
+            tipo_busqueda = f"Solicitudes con ID: {valor_id}"
             
         elif tipo_id == "cotizacion":
             # Buscar por ID de cotización
@@ -1910,15 +1929,44 @@ async def buscar_por_id(
 @app.get("/usuarios", response_class=HTMLResponse)
 async def listar_usuarios(
     request: Request,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    filtro_estado: str = Query("activos"),  # activos, inactivos, todos
     db: Session = Depends(database.get_db),
     user: models.Usuario = Depends(require_admin)
 ):
-    usuarios = db.query(models.Usuario).all()
+    """Lista usuarios con paginación y filtro de estado"""
+    
+    # Query base
+    query = db.query(models.Usuario)
+    
+    # Aplicar filtro de estado
+    if filtro_estado == "activos":
+        query = query.filter(models.Usuario.activo == 1)
+    elif filtro_estado == "inactivos":
+        query = query.filter(models.Usuario.activo == 0)
+    # Si es "todos", no filtrar
+    
+    # Contar total
+    total_usuarios = query.count()
+    
+    # Calcular paginación
+    total_pages = (total_usuarios + limit - 1) // limit
+    offset = (page - 1) * limit
+    
+    # Obtener usuarios paginados
+    usuarios = query.order_by(models.Usuario.fecha_creacion.desc()).offset(offset).limit(limit).all()
+    
     return templates.TemplateResponse("usuarios/lista.html", {
         "request": request,
         "current_user": user,
         "usuarios": usuarios,
-        "tipos_usuario": [tipo.value for tipo in TipoUsuario]
+        "tipos_usuario": [tipo.value for tipo in TipoUsuario],
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "total_usuarios": total_usuarios,
+        "filtro_estado": filtro_estado
     })
 
 @app.post("/usuarios")
@@ -2952,6 +3000,8 @@ async def api_check_inactivity(
 @app.get("/notificaciones", response_class=HTMLResponse)
 async def ver_notificaciones(
     request: Request,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     filtro_agente_id: str = Query(None),
     filtro_tipo: str = Query(None),  # NUEVO
     filtro_estado: str = Query(None),  # NUEVO
@@ -3017,7 +3067,15 @@ async def ver_notificaciones(
         except ValueError:
             pass
         
-    notificaciones = query.order_by(models.Notificacion.fecha_creacion.desc()).all()
+    # Contar total antes de paginar
+    total_notificaciones = query.count()
+    
+    # Calcular paginación
+    total_pages = (total_notificaciones + limit - 1) // limit
+    offset = (page - 1) * limit
+    
+    # Obtener notificaciones paginadas
+    notificaciones = query.order_by(models.Notificacion.fecha_creacion.desc()).offset(offset).limit(limit).all()
     
     # Calcular tiempos
     for n in notificaciones:
@@ -3073,7 +3131,11 @@ async def ver_notificaciones(
         "filtro_estado": filtro_estado,
         "fecha_inicio": fecha_inicio,
         "fecha_fin": fecha_fin,
-        "prospectos_activos": prospectos_activos
+        "prospectos_activos": prospectos_activos,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "total_notificaciones": total_notificaciones
     })
 
 @app.post("/notificaciones/{notificacion_id}/leer")

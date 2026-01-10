@@ -331,6 +331,7 @@
                                             data-prospecto-id="{{ prospecto.id }}"
                                             data-nombre="{{ prospecto.nombre or '' }}"
                                             data-apellido="{{ prospecto.apellido or '' }}"
+                                            data-empresa-segundo-titular="{{ prospecto.empresa_segundo_titular or '' }}"
                                             data-email="{{ prospecto.correo_electronico or '' }}"
                                             data-telefono="{{ prospecto.telefono or '' }}"
                                             data-indicativo-telefono="{{ prospecto.indicativo_telefono or '57' }}"
@@ -484,13 +485,18 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
+                                <label class="form-label">Empresa o Segundo Titular</label>
+                                <input type="text" class="form-control" name="empresa_segundo_titular"
+                                    placeholder="Opcional">
+                                <small class="text-muted">Nombre de empresa o segundo titular del viaje</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
                                 <label class="form-label">Email</label>
                                 <input type="email" class="form-control" name="correo_electronico"
                                     placeholder="Opcional">
                             </div>
-                        </div>
-                        <div class="col-md-6">
-                            <!-- Este col-md-6 estaba vacío, lo removí para evitar estructura inconsistente -->
                         </div>
                     </div>
 
@@ -650,6 +656,15 @@
                     </div>
 
                     <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editEmpresaSegundoTitular" class="form-label">Empresa o Segundo
+                                    Titular</label>
+                                <input type="text" class="form-control" name="empresa_segundo_titular"
+                                    id="editEmpresaSegundoTitular" placeholder="Opcional">
+                                <small class="text-muted">Nombre de empresa o segundo titular del viaje</small>
+                            </div>
+                        </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="editEmail" class="form-label">Email</label>

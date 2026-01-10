@@ -50,9 +50,11 @@ class Prospecto(Base):
     __tablename__ = "prospectos"
     
     id = Column(Integer, primary_key=True, index=True)
-    id_cliente = Column(String(20), unique=True, nullable=True)
-    nombre = Column(String(100), nullable=False)
-    apellido = Column(String(100), nullable=False)
+    id_cliente = Column(String(20), nullable=True, index=True)  # ✅ MODIFICADO: No es unique, se reutiliza por persona
+    id_solicitud = Column(String(20), unique=True, nullable=True, index=True)  # ✅ NUEVO: ID único por solicitud/caso
+    id_cotizacion = Column(String(20), nullable=True)  # ✅ ID único de cotización
+    nombre = Column(String(100), nullable=True)  # ✅ OPCIONAL: Solo teléfono y medio_ingreso son obligatorios
+    apellido = Column(String(100), nullable=True)  # ✅ Opcional: puede ser null
     correo_electronico = Column(String(100))
     telefono = Column(String(20))
     indicativo_telefono = Column(String(10), default="57")
@@ -86,6 +88,9 @@ class Prospecto(Base):
     # ✅ NUEVO: Dirección (solo para clientes ganados)
     direccion = Column(String(255), nullable=True)
     
+    # ✅ NUEVO: Empresa o segundo titular
+    empresa_segundo_titular = Column(String(255), nullable=True)
+    
     # ✅ NUEVO: Soft Delete - Fecha de eliminación lógica
     fecha_eliminacion = Column(DateTime, nullable=True)
     
@@ -104,12 +109,19 @@ class Prospecto(Base):
         backref="prospecto_original"
     )
     
-    # ✅ MÉTODO: Generar ID de cliente único
+    # ✅ MÉTODO: Generar ID de cliente único (identifica a la PERSONA, se reutiliza)
     def generar_id_cliente(self):
         if not self.id_cliente:
             timestamp = datetime.now().strftime("%Y%m%d")
             self.id_cliente = f"CL-{timestamp}-{self.id:04d}"
         return self.id_cliente
+    
+    # ✅ MÉTODO: Generar ID de solicitud único (identifica cada CASO/VIAJE)
+    def generar_id_solicitud(self):
+        if not self.id_solicitud:
+            timestamp = datetime.now().strftime("%Y%m%d")
+            self.id_solicitud = f"SOL-{timestamp}-{self.id:04d}"
+        return self.id_solicitud
     
     # ✅ MÉTODO: Determinar si tiene datos completos
     def verificar_datos_completos(self):

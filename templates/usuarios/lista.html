@@ -32,6 +32,43 @@
 </div>
 {% endif %}
 
+<!-- Filtros y Paginación -->
+<div class="card mb-3 border-0 shadow-sm bg-light">
+    <div class="card-body py-2">
+        <form method="get" action="/usuarios" class="row row-cols-lg-auto g-2 align-items-center">
+            <div class="col-12">
+                <span class="fw-bold text-muted small me-2"><i class="fas fa-filter"></i></span>
+            </div>
+
+            <!-- Filtro de Estado -->
+            <div class="col-12">
+                <select class="form-select form-select-sm" name="filtro_estado" onchange="this.form.submit()">
+                    <option value="activos" {% if filtro_estado=='activos' %}selected{% endif %}>👤 Solo Activos
+                    </option>
+                    <option value="inactivos" {% if filtro_estado=='inactivos' %}selected{% endif %}>🚫 Solo Inactivos
+                    </option>
+                    <option value="todos" {% if filtro_estado=='todos' %}selected{% endif %}>📋 Todos</option>
+                </select>
+            </div>
+
+            <!-- Límite de registros -->
+            <div class="col-12">
+                <select class="form-select form-select-sm" name="limit" onchange="this.form.submit()"
+                    title="Registros por página" style="max-width: 80px;">
+                    <option value="10" {% if limit==10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if limit==20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+
+            <div class="col-12 ms-auto text-end">
+                <span class="badge bg-white text-dark border">{{ usuarios|length }} / {{ total_usuarios }}</span>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-12">
         <div class="card">
@@ -104,6 +141,28 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Paginación -->
+                {% if total_pages > 1 %}
+                <nav class="mt-3">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                            <a class="page-link"
+                                href="/usuarios?page={{ page-1 }}&limit={{ limit }}&filtro_estado={{ filtro_estado }}">Anterior</a>
+                        </li>
+
+                        <li class="page-item disabled">
+                            <span class="page-link">Página {{ page }} de {{ total_pages }}</span>
+                        </li>
+
+                        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                            <a class="page-link"
+                                href="/usuarios?page={{ page+1 }}&limit={{ limit }}&filtro_estado={{ filtro_estado }}">Siguiente</a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+
                 {% else %}
                 <div class="text-center py-4">
                     <p class="text-muted">No hay usuarios registrados.</p>

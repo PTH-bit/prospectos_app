@@ -24,6 +24,9 @@
             <span class="badge rounded-pill bg-soft-info text-info border">
                 ID Cliente: {{ prospecto.id_cliente or 'N/A' }}
             </span>
+            <span class="badge rounded-pill bg-soft-success text-success border">
+                ID Solicitud: {{ prospecto.id_solicitud or 'N/A' }}
+            </span>
             <span class="badge rounded-pill bg-soft-warning text-warning border">
                 ID Cotización: {{ prospecto.id_cotizacion or 'N/A' }}
             </span>
@@ -342,8 +345,10 @@
             // Función para copiar datos de cotización
             function copiarDatosCotizacion(event) {
                 const datos = `ID Cliente\t{{ prospecto.id_cliente or 'N/A' }}
+ID Solicitud\t{{ prospecto.id_solicitud or 'N/A' }}
 ID Cotización\t{{ prospecto.id_cotizacion or 'N/A' }}
-Nombre\t{{ prospecto.nombre }} {{ prospecto.apellido }}
+Nombre\t{{ prospecto.nombre }} {{ prospecto.apellido }}{% if prospecto.empresa_segundo_titular %}
+Empresa/Segundo Titular\t{{ prospecto.empresa_segundo_titular }}{% endif %}
 Teléfono\t+{{ prospecto.indicativo_telefono }} {{ prospecto.telefono }}
 Email\t{{ prospecto.correo_electronico or 'N/A' }}
 Origen\t{{ prospecto.ciudad_origen or 'N/A' }}
@@ -402,6 +407,12 @@ Dirección\t{{ prospecto.direccion or 'N/A' }}`;
                                 <label class="form-label small fw-bold">Apellido *</label>
                                 <input type="text" class="form-control" name="apellido" value="{{ prospecto.apellido }}"
                                     required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Empresa o Segundo Titular</label>
+                                <input type="text" class="form-control" name="empresa_segundo_titular"
+                                    value="{{ prospecto.empresa_segundo_titular or '' }}">
+                                <small class="text-muted">Nombre de empresa o segundo titular del viaje</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Email</label>

@@ -389,10 +389,24 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 
                 # Campos opcionales - ✅ NORMALIZAR A MAYÚSCULAS
                 nombre = row.get('nombre')
+                empresa_segundo_titular = None  # Inicializar
+                
                 if not pd.isna(nombre):
                     nombre = str(nombre).strip().upper()  # ✅ MAYÚSCULAS
+                    
+                    # ✅ NUEVO: Detectar separador || para empresa/segundo titular
+                    if '||' in nombre:
+                        partes = nombre.split('||', 1)  # Dividir solo en la primera ocurrencia
+                        nombre = partes[0].strip()
+                        empresa_segundo_titular = partes[1].strip() if len(partes) > 1 else None
                 else:
                     nombre = None
+                
+                # Si no se detectó en nombre, verificar si viene en columna separada
+                if not empresa_segundo_titular:
+                    empresa_segundo_titular_col = row.get('empresa_segundo_titular')
+                    if not pd.isna(empresa_segundo_titular_col):
+                        empresa_segundo_titular = str(empresa_segundo_titular_col).strip().upper()
                 
                 apellido = row.get('apellido')
                 if not pd.isna(apellido):
@@ -539,6 +553,31 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 else:
                     direccion = None
                 
+                # ✅ NUEVO: Importar id_cliente e id_solicitud desde Excel
+                id_cliente_excel = row.get('id_cliente')
+                if not pd.isna(id_cliente_excel):
+                    id_cliente_excel = str(id_cliente_excel).strip()
+                else:
+                    id_cliente_excel = None
+                
+                id_solicitud_excel = row.get('id_solicitud')
+                if not pd.isna(id_solicitud_excel):
+                    id_solicitud_excel = str(id_solicitud_excel).strip()
+                    
+                    # Validar que id_solicitud sea único
+                    solicitud_existente = db.query(Prospecto).filter(
+                        Prospecto.id_solicitud == id_solicitud_excel
+                    ).first()
+                    
+                    if solicitud_existente:
+                        resultado['errores'].append({
+                            'fila': fila_num,
+                            'error': f'ID Solicitud duplicado: {id_solicitud_excel} (ya existe en el sistema)'
+                        })
+                        continue
+                else:
+                    id_solicitud_excel = None
+                
                 # Crear prospecto
                 nuevo_prospecto = Prospecto(
                     telefono=telefono,
@@ -562,7 +601,10 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                     fecha_nacimiento=fecha_nacimiento,
                     numero_identificacion=numero_identificacion,
                     fecha_compra=fecha_compra,  # ✅ NUEVO
-                    direccion=direccion  # ✅ NUEVO
+                    direccion=direccion,  # ✅ NUEVO
+                    empresa_segundo_titular=empresa_segundo_titular,  # ✅ NUEVO: Empresa o segundo titular
+                    id_cliente=id_cliente_excel,  # ✅ NUEVO: Asignar desde Excel si existe
+                    id_solicitud=id_solicitud_excel  # ✅ NUEVO: Asignar desde Excel si existe
                 )
                 
                 # Verificar datos completos
@@ -572,8 +614,18 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 db.commit()
                 db.refresh(nuevo_prospecto)
                 
-                # Generar ID de cliente
-                nuevo_prospecto.generar_id_cliente()
+                # ✅ Generar IDs si no se proporcionaron en Excel
+                # 1. id_cliente: Reutilizar si es recurrente, sino generar
+                if not nuevo_prospecto.id_cliente:
+                    if es_recurrente and prospecto_existente.id_cliente:
+                        nuevo_prospecto.id_cliente = prospecto_existente.id_cliente
+                    else:
+                        nuevo_prospecto.generar_id_cliente()
+                
+                # 2. id_solicitud: Siempre generar si no se proporcionó
+                if not nuevo_prospecto.id_solicitud:
+                    nuevo_prospecto.generar_id_solicitud()
+                
                 db.commit()
                 
                 # ✅ NUEVO: Si el estado es "ganado", generar ID de cotización
@@ -593,6 +645,11 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                     # Generar ID de cotización
                     estadistica.generar_id_cotizacion()
                     db.commit()
+                    
+                    # ✅ NUEVO: Crear notificaciones automáticas de viaje
+                    if fecha_ida:
+                        from main import crear_notificaciones_viaje
+                        crear_notificaciones_viaje(nuevo_prospecto, db)
                 
                 resultado['prospectos_creados'].append(nuevo_prospecto)
                 resultado['exitosos'] += 1

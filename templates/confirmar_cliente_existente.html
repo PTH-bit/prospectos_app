@@ -14,6 +14,17 @@
                     <div class="alert alert-info">
                         <h5>Se encontró un cliente existente con el teléfono: <strong>{{ nuevos_datos.telefono
                                 }}</strong></h5>
+                        <hr>
+                        <p class="mb-0">
+                            <strong>📋 Información de IDs:</strong><br>
+                            • <strong>ID Cliente:</strong>
+                            <code>{{ cliente_existente_principal.id_cliente or 'Pendiente' }}</code>
+                            <span class="badge bg-success">♻️ Se reutilizará</span><br>
+                            • <strong>ID Solicitud:</strong> <span class="badge bg-primary">✅ Se generará uno
+                                NUEVO</span><br>
+                            <small class="text-muted">El ID Cliente identifica a la persona, el ID Solicitud identifica
+                                cada caso/viaje</small>
+                        </p>
                     </div>
 
                     <!-- Información del Cliente Existente -->
