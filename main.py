@@ -1760,18 +1760,20 @@ async def subir_documento(
                 status_code=303
             )
         
-        # Crear directorio para el prospecto
-        prospecto_dir = os.path.join(UPLOAD_DIR, f"prospecto_{prospecto_id}")
-        os.makedirs(prospecto_dir, exist_ok=True)
+        # ✅ NUEVO: Crear directorio por fecha (uploads/YYYY/MM/DD/)
+        ruta_fecha = obtener_ruta_upload_por_fecha()
         
         # Generar nombre único para el archivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         nombre_archivo = f"{timestamp}_{archivo.filename}"
-        ruta_archivo = os.path.join(prospecto_dir, nombre_archivo)
+        ruta_archivo_completa = os.path.join(ruta_fecha, nombre_archivo)
         
         # Guardar archivo
-        with open(ruta_archivo, "wb") as buffer:
+        with open(ruta_archivo_completa, "wb") as buffer:
             shutil.copyfileobj(archivo.file, buffer)
+        
+        # ✅ GUARDAR RUTA RELATIVA desde uploads/ para portabilidad
+        ruta_relativa = os.path.relpath(ruta_archivo_completa, UPLOAD_DIR)
         
         # ✅ REGISTRAR DOCUMENTO EN BD
         documento = models.Documento(
@@ -1779,7 +1781,7 @@ async def subir_documento(
             usuario_id=user.id,
             nombre_archivo=archivo.filename,
             tipo_documento=tipo_documento,
-            ruta_archivo=ruta_archivo,
+            ruta_archivo=ruta_relativa,  # Guardar ruta relativa
             descripcion=descripcion
         )
         
