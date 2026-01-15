@@ -3,9 +3,13 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configuración
-SECRET_KEY = "tu_clave_secreta_muy_segura_aqui_cambiar_en_produccion"
+SECRET_KEY = os.getenv("SECRET_KEY", "tu_clave_secreta_muy_segura_aqui_cambiar_en_produccion")
 ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
