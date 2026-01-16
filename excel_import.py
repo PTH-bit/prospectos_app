@@ -10,7 +10,7 @@ import string
 from datetime import datetime
 from typing import Dict, List, Tuple
 from sqlalchemy.orm import Session
-from models import Usuario, Prospecto, MedioIngreso, TipoUsuario, EstadoProspecto
+from models import Usuario, Prospecto, MedioIngreso, TipoUsuario, EstadoProspecto, Cliente, Destino
 from auth import get_password_hash
 
 
@@ -103,6 +103,95 @@ def parsear_fecha(fecha_str) -> datetime.date:
         pass
     
     return None
+
+
+def calcular_similitud(texto1: str, texto2: str) -> float:
+    """
+    Calcula la similitud entre dos textos usando el algoritmo de Levenshtein.
+    Retorna un valor entre 0 (totalmente diferente) y 1 (idéntico).
+    
+    Args:
+        texto1: Primer texto a comparar
+        texto2: Segundo texto a comparar
+        
+    Returns:
+        Float entre 0 y 1 indicando similitud
+    """
+    if not texto1 or not texto2:
+        return 0.0
+    
+    # Normalizar textos
+    texto1 = str(texto1).strip().upper()
+    texto2 = str(texto2).strip().upper()
+    
+    if texto1 == texto2:
+        return 1.0
+    
+    # Algoritmo de Levenshtein simplificado
+    len1, len2 = len(texto1), len(texto2)
+    
+    # Crear matriz de distancias
+    matriz = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+    
+    # Inicializar primera fila y columna
+    for i in range(len1 + 1):
+        matriz[i][0] = i
+    for j in range(len2 + 1):
+        matriz[0][j] = j
+    
+    # Calcular distancias
+    for i in range(1, len1 + 1):
+        for j in range(1, len2 + 1):
+            if texto1[i-1] == texto2[j-1]:
+                costo = 0
+            else:
+                costo = 1
+            
+            matriz[i][j] = min(
+                matriz[i-1][j] + 1,      # Eliminación
+                matriz[i][j-1] + 1,      # Inserción
+                matriz[i-1][j-1] + costo # Sustitución
+            )
+    
+    # Calcular similitud (1 - distancia normalizada)
+    distancia = matriz[len1][len2]
+    max_len = max(len1, len2)
+    similitud = 1 - (distancia / max_len)
+    
+    return similitud
+
+
+def buscar_destino_similar(nombre: str, db: Session, umbral: float = 0.7):
+    """
+    Busca destinos similares en la base de datos.
+    
+    Args:
+        nombre: Nombre del destino a buscar
+        db: Sesión de base de datos
+        umbral: Umbral mínimo de similitud (0.0 a 1.0)
+        
+    Returns:
+        Tupla (destino_encontrado, similitud) o (None, 0.0) si no hay coincidencias
+    """
+    if not nombre:
+        return None, 0.0
+    
+    nombre_normalizado = str(nombre).strip().upper()
+    
+    # Obtener todos los destinos activos
+    destinos = db.query(Destino).filter(Destino.activo == 1).all()
+    
+    mejor_destino = None
+    mejor_similitud = 0.0
+    
+    for destino in destinos:
+        similitud = calcular_similitud(nombre_normalizado, destino.nombre)
+        
+        if similitud > mejor_similitud and similitud >= umbral:
+            mejor_similitud = similitud
+            mejor_destino = destino
+    
+    return mejor_destino, mejor_similitud
 
 
 def importar_usuarios_desde_excel(archivo_path: str, db: Session) -> Dict:
@@ -433,11 +522,44 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 else:
                     ciudad_origen = None
                 
-                destino = row.get('destino')
-                if not pd.isna(destino):
-                    destino = str(destino).strip().upper()  # ✅ MAYÚSCULAS
-                else:
-                    destino = None
+                # ✅ NUEVO: Buscar o crear destino en el catálogo CON SIMILITUD
+                destino_texto = row.get('destino')
+                destino_id = None
+                destino_nombre = None
+                
+                if not pd.isna(destino_texto):
+                    destino_nombre = str(destino_texto).strip().upper()
+                    
+                    # 1. Buscar coincidencia exacta
+                    destino_obj = db.query(Destino).filter(
+                        Destino.nombre == destino_nombre
+                    ).first()
+                    
+                    if destino_obj:
+                        # Destino encontrado exacto
+                        destino_id = destino_obj.id
+                        print(f"   ✓ Destino exacto: {destino_nombre}")
+                    else:
+                        # 2. Buscar por similitud (umbral 70%)
+                        destino_similar, similitud = buscar_destino_similar(destino_nombre, db, umbral=0.7)
+                        
+                        if destino_similar:
+                            # Destino similar encontrado - usar el existente
+                            destino_id = destino_similar.id
+                            destino_nombre = destino_similar.nombre  # Usar nombre estandarizado
+                            print(f"   ≈ Destino similar encontrado: '{destino_texto}' → '{destino_similar.nombre}' ({similitud*100:.0f}% similar)")
+                        else:
+                            # 3. Crear nuevo destino
+                            nuevo_destino = Destino(
+                                nombre=destino_nombre,
+                                pais=None,  # Se puede agregar manualmente después
+                                continente=None,
+                                activo=1
+                            )
+                            db.add(nuevo_destino)
+                            db.flush()  # Para obtener el ID
+                            destino_id = nuevo_destino.id
+                            print(f"   + Nuevo destino creado: {destino_nombre}")
                 
                 # Fechas
                 fecha_ida = parsear_fecha(row.get('fecha_ida'))
@@ -586,7 +708,8 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                     apellido=apellido,
                     correo_electronico=correo_electronico,
                     ciudad_origen=ciudad_origen,
-                    destino=destino,
+                    destino_id=destino_id,  # ✅ NUEVO: ID del catálogo
+                    destino=destino_nombre,  # ✅ Mantener texto por compatibilidad
                     fecha_ida=fecha_ida,
                     fecha_vuelta=fecha_vuelta,
                     pasajeros_adultos=pasajeros_adultos,
@@ -656,6 +779,226 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 
                 if es_recurrente:
                     resultado['recurrentes'] += 1
+                
+            except Exception as e:
+                db.rollback()
+                resultado['errores'].append({
+                    'fila': fila_num,
+                    'error': f'Error al procesar: {str(e)}'
+                })
+        
+    except Exception as e:
+        resultado['errores'].append({
+            'fila': 0,
+            'error': f'Error al leer archivo: {str(e)}'
+        })
+    
+    return resultado
+
+
+def importar_clientes_desde_excel(archivo_path: str, db: Session) -> Dict:
+    """
+    Importa SOLO clientes (información de contacto) desde un archivo Excel.
+    NO crea solicitudes de viaje.
+    
+    Columnas esperadas:
+    - telefono (requerido)
+    - indicativo_telefono (opcional, default: "57")
+    - nombre (opcional)
+    - apellido (opcional)
+    - correo_electronico (opcional)
+    - telefono_secundario (opcional)
+    - indicativo_telefono_secundario (opcional)
+    - fecha_nacimiento (opcional, formato: DD/MM/YYYY o YYYY-MM-DD)
+    - numero_identificacion (opcional)
+    - direccion (opcional)
+    - agente_asignado (opcional, username del agente)
+    
+    Args:
+        archivo_path: Ruta al archivo Excel
+        db: Sesión de base de datos
+        
+    Returns:
+        Diccionario con resultados de la importación
+    """
+    resultado = {
+        'exitosos': 0,
+        'errores': [],
+        'clientes_creados': [],
+        'clientes_actualizados': 0
+    }
+    
+    try:
+        # Leer archivo Excel
+        df = pd.read_excel(archivo_path)
+        
+        # Validar columna requerida
+        if 'telefono' not in df.columns:
+            resultado['errores'].append({
+                'fila': 0,
+                'error': 'Columna "telefono" es requerida'
+            })
+            return resultado
+        
+        # Procesar cada fila
+        for index, row in df.iterrows():
+            fila_num = index + 2  # +2 porque Excel empieza en 1 y tiene encabezado
+            
+            try:
+                # Validar y limpiar teléfono (requerido)
+                telefono = row.get('telefono')
+                
+                if pd.isna(telefono) or not str(telefono).strip():
+                    resultado['errores'].append({
+                        'fila': fila_num,
+                        'error': 'Teléfono es requerido'
+                    })
+                    continue
+                
+                telefono = limpiar_telefono(telefono)
+                
+                if not telefono:
+                    resultado['errores'].append({
+                        'fila': fila_num,
+                        'error': 'Teléfono inválido (debe contener solo dígitos)'
+                    })
+                    continue
+                
+                # Indicativo de teléfono
+                indicativo_telefono = row.get('indicativo_telefono', '57')
+                if pd.isna(indicativo_telefono):
+                    indicativo_telefono = '57'
+                else:
+                    indicativo_telefono = str(indicativo_telefono).strip()
+                
+                # Verificar si existe un cliente con este teléfono
+                cliente_existente = db.query(Cliente).filter(
+                    Cliente.telefono == telefono
+                ).first()
+                
+                # Campos opcionales - Normalizar a MAYÚSCULAS
+                nombre = row.get('nombre')
+                if not pd.isna(nombre):
+                    nombre = str(nombre).strip().upper()
+                else:
+                    nombre = None
+                
+                apellido = row.get('apellido')
+                if not pd.isna(apellido):
+                    apellido = str(apellido).strip().upper()
+                else:
+                    apellido = None
+                
+                # Validar email si se proporciona
+                correo_electronico = row.get('correo_electronico')
+                if not pd.isna(correo_electronico):
+                    correo_electronico = str(correo_electronico).strip().lower()
+                    if not validar_email(correo_electronico):
+                        resultado['errores'].append({
+                            'fila': fila_num,
+                            'error': f'Email inválido: {correo_electronico}'
+                        })
+                        continue
+                else:
+                    correo_electronico = None
+                
+                # Teléfono secundario
+                telefono_secundario = row.get('telefono_secundario')
+                if not pd.isna(telefono_secundario):
+                    telefono_secundario = limpiar_telefono(telefono_secundario)
+                else:
+                    telefono_secundario = None
+                
+                indicativo_telefono_secundario = row.get('indicativo_telefono_secundario', '57')
+                if pd.isna(indicativo_telefono_secundario):
+                    indicativo_telefono_secundario = '57'
+                else:
+                    indicativo_telefono_secundario = str(indicativo_telefono_secundario).strip()
+                
+                # Dirección
+                direccion = row.get('direccion')
+                if not pd.isna(direccion):
+                    direccion = str(direccion).strip().upper()
+                else:
+                    direccion = None
+                
+                # Fecha de nacimiento
+                fecha_nacimiento = parsear_fecha(row.get('fecha_nacimiento'))
+                
+                # Número de identificación
+                numero_identificacion = row.get('numero_identificacion')
+                if not pd.isna(numero_identificacion):
+                    numero_identificacion = str(numero_identificacion).strip()
+                else:
+                    numero_identificacion = None
+                
+                # Agente asignado
+                agente_asignado_id = None
+                agente_username = row.get('agente_asignado')
+                if not pd.isna(agente_username):
+                    agente_username = str(agente_username).strip()
+                    agente = db.query(Usuario).filter(
+                        Usuario.username == agente_username
+                    ).first()
+                    
+                    if agente:
+                        agente_asignado_id = agente.id
+                    else:
+                        resultado['errores'].append({
+                            'fila': fila_num,
+                            'error': f'Agente no encontrado: {agente_username} (se creará sin agente asignado)'
+                        })
+                
+                # Si el cliente existe, actualizar sus datos
+                if cliente_existente:
+                    # Actualizar solo campos que no estén vacíos
+                    if nombre:
+                        cliente_existente.nombre = nombre
+                    if apellido:
+                        cliente_existente.apellido = apellido
+                    if correo_electronico:
+                        cliente_existente.correo_electronico = correo_electronico
+                    if telefono_secundario:
+                        cliente_existente.telefono_secundario = telefono_secundario
+                        cliente_existente.indicativo_telefono_secundario = indicativo_telefono_secundario
+                    if fecha_nacimiento:
+                        cliente_existente.fecha_nacimiento = fecha_nacimiento
+                    if numero_identificacion:
+                        cliente_existente.numero_identificacion = numero_identificacion
+                    if direccion:
+                        cliente_existente.direccion = direccion
+                    if agente_asignado_id:
+                        cliente_existente.agente_asignado_id = agente_asignado_id
+                    
+                    db.commit()
+                    resultado['clientes_actualizados'] += 1
+                    
+                else:
+                    # Crear nuevo cliente
+                    nuevo_cliente = Cliente(
+                        telefono=telefono,
+                        indicativo_telefono=indicativo_telefono,
+                        nombre=nombre,
+                        apellido=apellido,
+                        correo_electronico=correo_electronico,
+                        telefono_secundario=telefono_secundario,
+                        indicativo_telefono_secundario=indicativo_telefono_secundario,
+                        fecha_nacimiento=fecha_nacimiento,
+                        numero_identificacion=numero_identificacion,
+                        direccion=direccion,
+                        agente_asignado_id=agente_asignado_id
+                    )
+                    
+                    db.add(nuevo_cliente)
+                    db.flush()  # Para obtener el ID
+                    
+                    # Generar ID de cliente
+                    nuevo_cliente.generar_id_cliente()
+                    db.commit()
+                    db.refresh(nuevo_cliente)
+                    
+                    resultado['clientes_creados'].append(nuevo_cliente)
+                    resultado['exitosos'] += 1
                 
             except Exception as e:
                 db.rollback()

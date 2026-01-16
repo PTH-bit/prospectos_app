@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Destinos{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold">🌍 Gestión de Destinos</h2>
+            <p class="text-muted">Administra el catálogo de destinos turísticos</p>
+        </div>
+    </div>
+
+    <!-- Mensajes de éxito/error -->
+    {% if request.query_params.get('success') %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {% if request.query_params.get('success') == 'created' %}
+        ✅ Destino creado exitosamente
+        {% elif request.query_params.get('success') == 'updated' %}
+        ✅ Destino actualizado exitosamente
+        {% elif request.query_params.get('success') == 'merged' %}
+        ✅ Destinos fusionados exitosamente ({{ request.query_params.get('count') }} prospectos movidos)
+        {% elif request.query_params.get('success') == 'deleted' %}
+        ✅ Destino desactivado exitosamente
+        {% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {% if request.query_params.get('error') == 'duplicate' %}
+        ❌ Ya existe un destino con ese nombre
+        {% elif request.query_params.get('error') == 'same' %}
+        ❌ No puedes fusionar un destino consigo mismo
+        {% elif request.query_params.get('error') == 'has_prospectos' %}
+        ❌ No se puede eliminar: tiene {{ request.query_params.get('count') }} prospectos asociados. Usa fusionar en su
+        lugar.
+        {% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Botón crear nuevo -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearDestino">
+                <i class="fas fa-plus"></i> Nuevo Destino
+            </button>
+            <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalFusionarDestinos">
+                <i class="fas fa-compress-arrows-alt"></i> Fusionar Destinos
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabla de destinos -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>País</th>
+                            <th>Continente</th>
+                            <th>Prospectos</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for destino, total_prospectos in destinos %}
+                        <tr class="{% if destino.activo == 0 %}table-secondary{% endif %}">
+                            <td>{{ destino.id }}</td>
+                            <td><strong>{{ destino.nombre }}</strong></td>
+                            <td>{{ destino.pais or '-' }}</td>
+                            <td>{{ destino.continente or '-' }}</td>
+                            <td>
+                                <span class="badge bg-info">{{ total_prospectos }}</span>
+                            </td>
+                            <td>
+                                {% if destino.activo == 1 %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                    data-bs-target="#modalEditarDestino" data-id="{{ destino.id }}"
+                                    data-nombre="{{ destino.nombre }}" data-pais="{{ destino.pais or '' }}"
+                                    data-continente="{{ destino.continente or '' }}" data-activo="{{ destino.activo }}">
+                                    ✏️ Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Destino -->
+<div class="modal fade" id="modalCrearDestino" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nuevo Destino</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/destinos/crear">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre *</label>
+                        <input type="text" class="form-control" name="nombre" required>
+                        <small class="text-muted">Se convertirá automáticamente a MAYÚSCULAS</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">País</label>
+                        <input type="text" class="form-control" name="pais">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Continente</label>
+                        <select class="form-select" name="continente">
+                            <option value="">Seleccionar...</option>
+                            <option value="AMÉRICA">AMÉRICA</option>
+                            <option value="EUROPA">EUROPA</option>
+                            <option value="ASIA">ASIA</option>
+                            <option value="ÁFRICA">ÁFRICA</option>
+                            <option value="OCEANÍA">OCEANÍA</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Destino</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Destino -->
+<div class="modal fade" id="modalEditarDestino" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Editar Destino</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="" id="formEditarDestino">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre *</label>
+                        <input type="text" class="form-control" name="nombre" id="editNombre" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">País</label>
+                        <input type="text" class="form-control" name="pais" id="editPais">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Continente</label>
+                        <select class="form-select" name="continente" id="editContinente">
+                            <option value="">Seleccionar...</option>
+                            <option value="AMÉRICA">AMÉRICA</option>
+                            <option value="EUROPA">EUROPA</option>
+                            <option value="ASIA">ASIA</option>
+                            <option value="ÁFRICA">ÁFRICA</option>
+                            <option value="OCEANÍA">OCEANÍA</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Estado</label>
+                        <select class="form-select" name="activo" id="editActivo">
+                            <option value="1">Activo</option>
+                            <option value="0">Inactivo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Actualizar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Fusionar Destinos -->
+<div class="modal fade" id="modalFusionarDestinos" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">⚠️ Fusionar Destinos</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/destinos/fusionar">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>¿Qué hace esto?</strong><br>
+                        Mueve todos los prospectos del destino secundario al principal y desactiva el secundario.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Destino Principal (mantener) *</label>
+                        <select class="form-select" name="destino_principal_id" required>
+                            <option value="">Seleccionar...</option>
+                            {% for destino, _ in destinos %}
+                            {% if destino.activo == 1 %}
+                            <option value="{{ destino.id }}">{{ destino.nombre }} ({{ destino.pais or 'Sin país' }})
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Destino Secundario (eliminar) *</label>
+                        <select class="form-select" name="destino_secundario_id" required>
+                            <option value="">Seleccionar...</option>
+                            {% for destino, _ in destinos %}
+                            {% if destino.activo == 1 %}
+                            <option value="{{ destino.id }}">{{ destino.nombre }} ({{ destino.pais or 'Sin país' }})
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Fusionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Configurar modal de edición
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalEditar = document.getElementById('modalEditarDestino');
+
+        modalEditar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const id = button.getAttribute('data-id');
+            const nombre = button.getAttribute('data-nombre');
+            const pais = button.getAttribute('data-pais');
+            const continente = button.getAttribute('data-continente');
+            const activo = button.getAttribute('data-activo');
+
+            document.getElementById('editNombre').value = nombre;
+            document.getElementById('editPais').value = pais;
+            document.getElementById('editContinente').value = continente;
+            document.getElementById('editActivo').value = activo;
+            document.getElementById('formEditarDestino').action = `/destinos/${id}/editar`;
+        });
+    });
+</script>
+{% endblock %}

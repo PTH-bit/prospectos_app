@@ -405,6 +405,9 @@ async def descargar_plantilla(
     elif tipo == "prospectos":
         file_path = "static/plantillas/plantilla_prospectos.xlsx"
         filename = "plantilla_prospectos.xlsx"
+    elif tipo == "clientes":
+        file_path = "static/plantillas/plantilla_clientes.xlsx"
+        filename = "plantilla_clientes.xlsx"
     else:
         raise HTTPException(status_code=404, detail="Plantilla no encontrada")
     
@@ -416,6 +419,227 @@ async def descargar_plantilla(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@app.post("/importar-clientes")
+async def importar_clientes(
+    request: Request,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Procesa la importación de CLIENTES (sin solicitudes) desde Excel"""
+    try:
+        # Validar archivo
+        es_valido, mensaje_error = excel_import.validar_archivo_excel(archivo)
+        if not es_valido:
+            return templates.TemplateResponse("importar_datos.html", {
+                "request": request,
+                "current_user": user,
+                "resultado_clientes": {
+                    "exitosos": 0,
+                    "errores": [{"fila": 0, "error": mensaje_error}],
+                    "clientes_actualizados": 0
+                }
+            })
+        
+        # Guardar archivo temporalmente
+        temp_path = f"uploads/temp_{archivo.filename}"
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+        
+        # Importar clientes
+        resultado = excel_import.importar_clientes_desde_excel(temp_path, db)
+        
+        # Eliminar archivo temporal
+        os.remove(temp_path)
+        
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_clientes": resultado
+        })
+        
+    except Exception as e:
+        return templates.TemplateResponse("importar_datos.html", {
+            "request": request,
+            "current_user": user,
+            "resultado_clientes": {
+                "exitosos": 0,
+                "errores": [{"fila": 0, "error": f"Error procesando archivo: {str(e)}"}],
+                "clientes_actualizados": 0
+            }
+        })
+
+
+# ========== API DE AUTOCOMPLETADO DE DESTINOS ==========
+
+@app.get("/api/destinos/buscar")
+async def buscar_destinos(
+    q: str = Query(..., min_length=2),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(get_current_user)
+):
+    """Buscar destinos para autocompletado"""
+    if not user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    
+    destinos = db.query(models.Destino).filter(
+        models.Destino.nombre.ilike(f"%{q}%"),
+        models.Destino.activo == 1
+    ).limit(10).all()
+    
+    return [{"id": d.id, "nombre": d.nombre, "pais": d.pais} for d in destinos]
+
+
+# ========== PANEL DE GESTIÓN DE DESTINOS ==========
+
+@app.get("/destinos", response_class=HTMLResponse)
+async def listar_destinos(
+    request: Request,
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Panel de gestión de destinos"""
+    # Obtener todos los destinos con conteo de prospectos
+    destinos = db.query(
+        models.Destino,
+        func.count(models.Prospecto.id).label('total_prospectos')
+    ).outerjoin(
+        models.Prospecto, models.Prospecto.destino_id == models.Destino.id
+    ).group_by(models.Destino.id).order_by(models.Destino.nombre).all()
+    
+    return templates.TemplateResponse("destinos.html", {
+        "request": request,
+        "current_user": user,
+        "destinos": destinos
+    })
+
+
+@app.post("/destinos/crear")
+async def crear_destino(
+    request: Request,
+    nombre: str = Form(...),
+    pais: str = Form(None),
+    continente: str = Form(None),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Crear nuevo destino"""
+    nombre_normalizado = nombre.strip().upper()
+    
+    # Verificar si ya existe
+    existente = db.query(models.Destino).filter(
+        models.Destino.nombre == nombre_normalizado
+    ).first()
+    
+    if existente:
+        return RedirectResponse(url="/destinos?error=duplicate", status_code=303)
+    
+    nuevo_destino = models.Destino(
+        nombre=nombre_normalizado,
+        pais=pais.strip().upper() if pais else None,
+        continente=continente.strip().upper() if continente else None,
+        activo=1
+    )
+    
+    db.add(nuevo_destino)
+    db.commit()
+    
+    return RedirectResponse(url="/destinos?success=created", status_code=303)
+
+
+@app.post("/destinos/{destino_id}/editar")
+async def editar_destino(
+    destino_id: int,
+    nombre: str = Form(...),
+    pais: str = Form(None),
+    continente: str = Form(None),
+    activo: int = Form(1),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Editar destino existente"""
+    destino = db.query(models.Destino).filter(models.Destino.id == destino_id).first()
+    
+    if not destino:
+        raise HTTPException(status_code=404, detail="Destino no encontrado")
+    
+    destino.nombre = nombre.strip().upper()
+    destino.pais = pais.strip().upper() if pais else None
+    destino.continente = continente.strip().upper() if continente else None
+    destino.activo = activo
+    
+    db.commit()
+    
+    return RedirectResponse(url="/destinos?success=updated", status_code=303)
+
+
+@app.post("/destinos/fusionar")
+async def fusionar_destinos(
+    destino_principal_id: int = Form(...),
+    destino_secundario_id: int = Form(...),
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Fusionar dos destinos - mover todos los prospectos del secundario al principal"""
+    destino_principal = db.query(models.Destino).filter(
+        models.Destino.id == destino_principal_id
+    ).first()
+    
+    destino_secundario = db.query(models.Destino).filter(
+        models.Destino.id == destino_secundario_id
+    ).first()
+    
+    if not destino_principal or not destino_secundario:
+        raise HTTPException(status_code=404, detail="Destino no encontrado")
+    
+    if destino_principal_id == destino_secundario_id:
+        return RedirectResponse(url="/destinos?error=same", status_code=303)
+    
+    # Mover todos los prospectos del secundario al principal
+    prospectos_afectados = db.query(models.Prospecto).filter(
+        models.Prospecto.destino_id == destino_secundario_id
+    ).update({"destino_id": destino_principal_id, "destino": destino_principal.nombre})
+    
+    # Desactivar el destino secundario
+    destino_secundario.activo = 0
+    
+    db.commit()
+    
+    return RedirectResponse(
+        url=f"/destinos?success=merged&count={prospectos_afectados}",
+        status_code=303
+    )
+
+
+@app.post("/destinos/{destino_id}/eliminar")
+async def eliminar_destino(
+    destino_id: int,
+    db: Session = Depends(database.get_db),
+    user: models.Usuario = Depends(require_admin)
+):
+    """Desactivar destino (soft delete)"""
+    destino = db.query(models.Destino).filter(models.Destino.id == destino_id).first()
+    
+    if not destino:
+        raise HTTPException(status_code=404, detail="Destino no encontrado")
+    
+    # Verificar si tiene prospectos asociados
+    prospectos_count = db.query(models.Prospecto).filter(
+        models.Prospecto.destino_id == destino_id
+    ).count()
+    
+    if prospectos_count > 0:
+        return RedirectResponse(
+            url=f"/destinos?error=has_prospectos&count={prospectos_count}",
+            status_code=303
+        )
+    
+    destino.activo = 0
+    db.commit()
+    
+    return RedirectResponse(url="/destinos?success=deleted", status_code=303)
 
 
 # Dashboard principal con filtros de fecha - VERSIÓN CORREGIDA
@@ -686,11 +910,13 @@ async def dashboard(
                 models.Prospecto.fecha_registro >= fecha_inicio_dt,
                 models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
-            prospectos_seguimiento = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.usuario_id == user.id,
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.EN_SEGUIMIENTO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            
+            # ✅ CORREGIDO: Contar estado ACTUAL, no histórico
+            prospectos_seguimiento = db.query(models.Prospecto).filter(
+                models.Prospecto.agente_asignado_id == user.id,
+                models.Prospecto.estado == EstadoProspecto.EN_SEGUIMIENTO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
             # Nota: Cotizados ya usa EstadisticaCotizacion (correcto)
@@ -700,18 +926,20 @@ async def dashboard(
                 models.EstadisticaCotizacion.fecha_cotizacion <= fecha_fin_obj
             ).count()
             
-            prospectos_ganados = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.usuario_id == user.id,
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.GANADO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            # ✅ CORREGIDO: Contar estado ACTUAL para ganados
+            prospectos_ganados = db.query(models.Prospecto).filter(
+                models.Prospecto.agente_asignado_id == user.id,
+                models.Prospecto.estado == EstadoProspecto.GANADO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
-            prospectos_perdidos = db.query(models.HistorialEstado).filter(
-                models.HistorialEstado.usuario_id == user.id,
-                models.HistorialEstado.estado_nuevo == EstadoProspecto.CERRADO_PERDIDO.value,
-                models.HistorialEstado.fecha_cambio >= fecha_inicio_dt,
-                models.HistorialEstado.fecha_cambio <= fecha_fin_dt
+            # ✅ CORREGIDO: Contar estado ACTUAL para perdidos
+            prospectos_perdidos = db.query(models.Prospecto).filter(
+                models.Prospecto.agente_asignado_id == user.id,
+                models.Prospecto.estado == EstadoProspecto.CERRADO_PERDIDO.value,
+                models.Prospecto.fecha_registro >= fecha_inicio_dt,
+                models.Prospecto.fecha_registro <= fecha_fin_dt
             ).count()
             
             print(f"📊 Estados agente - Nuevos: {prospectos_nuevos}, Seguimiento: {prospectos_seguimiento}, Cotizados: {prospectos_cotizados}, Ganados: {prospectos_ganados}, Perdidos: {prospectos_perdidos}")

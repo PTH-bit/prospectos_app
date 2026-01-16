@@ -35,6 +35,74 @@ class MedioIngreso(Base):
     nombre = Column(String(50), unique=True, nullable=False)
     activo = Column(Integer, default=1)
 
+class Destino(Base):
+    __tablename__ = "destinos"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(100), unique=True, nullable=False, index=True)
+    pais = Column(String(100), nullable=True)
+    continente = Column(String(50), nullable=True)
+    activo = Column(Integer, default=1)
+    fecha_creacion = Column(DateTime, default=datetime.now)
+    
+    # ✅ MÉTODO: Normalizar nombre de destino
+    @staticmethod
+    def normalizar_nombre(nombre):
+        """Normaliza el nombre del destino a mayúsculas"""
+        if not nombre:
+            return None
+        return str(nombre).strip().upper()
+
+class Cliente(Base):
+    __tablename__ = "clientes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    id_cliente = Column(String(20), unique=True, nullable=False, index=True)
+    nombre = Column(String(100), nullable=True)
+    apellido = Column(String(100), nullable=True)
+    correo_electronico = Column(String(100), nullable=True)
+    telefono = Column(String(20), nullable=False)
+    indicativo_telefono = Column(String(10), default="57")
+    telefono_secundario = Column(String(20), nullable=True)
+    indicativo_telefono_secundario = Column(String(10), default="57")
+    fecha_nacimiento = Column(Date, nullable=True)
+    numero_identificacion = Column(String(50), nullable=True)
+    direccion = Column(String(255), nullable=True)
+    agente_asignado_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    fecha_registro = Column(DateTime, default=datetime.now)
+    fecha_eliminacion = Column(DateTime, nullable=True)  # Soft delete
+    
+    # Relaciones
+    agente_asignado = relationship("Usuario")
+    solicitudes = relationship("Prospecto", back_populates="cliente")
+    
+    # ✅ MÉTODO: Generar ID de cliente único
+    def generar_id_cliente(self):
+        if not self.id_cliente:
+            timestamp = datetime.now().strftime("%Y%m%d")
+            self.id_cliente = f"CL-{timestamp}-{self.id:04d}"
+        return self.id_cliente
+    
+    def get_telefono_whatsapp(self, telefono_principal=True):
+        """Obtiene el teléfono completo para WhatsApp"""
+        if telefono_principal:
+            indicativo = self.indicativo_telefono or "57"
+            telefono = (self.telefono or "").replace(' ', '').replace('-', '')
+            return f"{indicativo}{telefono}" if telefono else None
+        else:
+            if not self.telefono_secundario:
+                return None
+            indicativo = self.indicativo_telefono_secundario or "57"
+            telefono = self.telefono_secundario.replace(' ', '').replace('-', '')
+            return f"{indicativo}{telefono}"
+    
+    def get_whatsapp_link(self, telefono_principal=True):
+        """Genera el enlace de WhatsApp"""
+        telefono_completo = self.get_telefono_whatsapp(telefono_principal)
+        if telefono_completo:
+            return f"https://wa.me/{telefono_completo}"
+        return "#"
+
 class Usuario(Base):
     __tablename__ = "usuarios"
     
@@ -50,18 +118,32 @@ class Prospecto(Base):
     __tablename__ = "prospectos"
     
     id = Column(Integer, primary_key=True, index=True)
-    id_cliente = Column(String(20), nullable=True, index=True)  # ✅ MODIFICADO: No es unique, se reutiliza por persona
-    id_solicitud = Column(String(20), unique=True, nullable=True, index=True)  # ✅ NUEVO: ID único por solicitud/caso
-    id_cotizacion = Column(String(20), nullable=True)  # ✅ ID único de cotización
-    nombre = Column(String(100), nullable=True)  # ✅ OPCIONAL: Solo teléfono y medio_ingreso son obligatorios
-    apellido = Column(String(100), nullable=True)  # ✅ Opcional: puede ser null
-    correo_electronico = Column(String(100))
-    telefono = Column(String(20))
-    indicativo_telefono = Column(String(10), default="57")
-    telefono_secundario = Column(String(20), nullable=True)
-    indicativo_telefono_secundario = Column(String(10), default="57")
+    
+    # ✅ NUEVO: Relación con Cliente
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=True)  # Nullable para compatibilidad
+    
+    # ✅ DEPRECATED: Campos de cliente (mantener para compatibilidad temporal)
+    id_cliente = Column(String(20), nullable=True, index=True)  # Deprecado, usar cliente.id_cliente
+    nombre = Column(String(100), nullable=True)  # Deprecado, usar cliente.nombre
+    apellido = Column(String(100), nullable=True)  # Deprecado, usar cliente.apellido
+    correo_electronico = Column(String(100))  # Deprecado, usar cliente.correo_electronico
+    telefono = Column(String(20))  # Deprecado, usar cliente.telefono
+    indicativo_telefono = Column(String(10), default="57")  # Deprecado
+    telefono_secundario = Column(String(20), nullable=True)  # Deprecado
+    indicativo_telefono_secundario = Column(String(10), default="57")  # Deprecado
+    fecha_nacimiento = Column(Date, nullable=True)  # Deprecado, usar cliente.fecha_nacimiento
+    numero_identificacion = Column(String(50), nullable=True)  # Deprecado
+    direccion = Column(String(255), nullable=True)  # Deprecado
+    
+    # ✅ Campos específicos de la solicitud
+    id_solicitud = Column(String(20), unique=True, nullable=True, index=True)
+    id_cotizacion = Column(String(20), nullable=True)
+    
+    # ✅ NUEVO: Relación con Destino
+    destino_id = Column(Integer, ForeignKey("destinos.id"), nullable=True)
+    destino = Column(String(100))  # Mantener para compatibilidad temporal
+    
     ciudad_origen = Column(String(100))
-    destino = Column(String(100))
     fecha_ida = Column(Date)
     fecha_vuelta = Column(Date)
     pasajeros_adultos = Column(Integer, default=1)
@@ -77,24 +159,19 @@ class Prospecto(Base):
     tiene_datos_completos = Column(Boolean, default=False)
     cliente_recurrente = Column(Boolean, default=False)
     prospecto_original_id = Column(Integer, ForeignKey("prospectos.id"), nullable=True)
-    
-    # Nuevos campos para clientes ganados
-    fecha_nacimiento = Column(Date, nullable=True)
-    numero_identificacion = Column(String(50), nullable=True)
-    
-    # ✅ NUEVO: Fecha de compra (cuando se ganó la venta)
+
+    # ✅ Fecha de compra (cuando se ganó la venta)
     fecha_compra = Column(Date, nullable=True)
     
-    # ✅ NUEVO: Dirección (solo para clientes ganados)
-    direccion = Column(String(255), nullable=True)
-    
-    # ✅ NUEVO: Empresa o segundo titular
+    # ✅ Empresa o segundo titular
     empresa_segundo_titular = Column(String(255), nullable=True)
     
-    # ✅ NUEVO: Soft Delete - Fecha de eliminación lógica
+    # ✅ Soft Delete - Fecha de eliminación lógica
     fecha_eliminacion = Column(DateTime, nullable=True)
     
     # Relaciones
+    cliente = relationship("Cliente", back_populates="solicitudes")
+    destino_rel = relationship("Destino")
     medio_ingreso = relationship("MedioIngreso")
     agente_asignado = relationship("Usuario", foreign_keys=[agente_asignado_id])
     agente_original = relationship("Usuario", foreign_keys=[agente_original_id])

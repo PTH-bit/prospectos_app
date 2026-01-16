@@ -1061,18 +1061,89 @@
 
     // ========== AUTOCOMPLETADO PARA DESTINOS ==========
     document.addEventListener('DOMContentLoaded', function () {
-        // Configurar autocompletado si los elementos existen
-        const destinoInput = document.getElementById('destinoInput');
-        const editDestinoInput = document.getElementById('editDestino');
+        // Función para configurar autocompletado en un input
+        function setupDestinoAutocomplete(inputElement, datalistId) {
+            if (!inputElement) return;
 
-        if (destinoInput) {
-            console.log("✅ Configurando autocompletado para destinoInput");
-            // Tu código de autocompletado aquí
+            let timeoutId = null;
+            const datalist = document.getElementById(datalistId) || createDatalist(datalistId);
+
+            inputElement.addEventListener('input', function () {
+                const query = this.value.trim();
+
+                // Limpiar timeout anterior
+                if (timeoutId) clearTimeout(timeoutId);
+
+                // Si el query es muy corto, limpiar sugerencias
+                if (query.length < 2) {
+                    datalist.innerHTML = '';
+                    return;
+                }
+
+                // Esperar 300ms antes de hacer la petición (debounce)
+                timeoutId = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`/api/destinos/buscar?q=${encodeURIComponent(query)}`);
+                        
+                        if (!response.ok) {
+                            console.error('Error al buscar destinos:', response.statusText);
+                            return;
+                        }
+
+                        const destinos = await response.json();
+                        
+                        // Limpiar datalist
+                        datalist.innerHTML = '';
+
+                        // Agregar opciones
+                        destinos.forEach(destino => {
+                            const option = document.createElement('option');
+                            option.value = destino.nombre;
+                            if (destino.pais) {
+                                option.textContent = `${destino.nombre} - ${destino.pais}`;
+                            }
+                            datalist.appendChild(option);
+                        });
+
+                        console.log(`✅ ${destinos.length} destinos encontrados para "${query}"`);
+                    } catch (error) {
+                        console.error('Error en autocompletado de destinos:', error);
+                    }
+                }, 300);
+            });
         }
 
+        // Función auxiliar para crear datalist si no existe
+        function createDatalist(id) {
+            let datalist = document.getElementById(id);
+            if (!datalist) {
+                datalist = document.createElement('datalist');
+                datalist.id = id;
+                document.body.appendChild(datalist);
+            }
+            return datalist;
+        }
+
+        // Configurar autocompletado para formulario de crear
+        const destinoInput = document.getElementById('destinoInput');
+        if (destinoInput) {
+            setupDestinoAutocomplete(destinoInput, 'destinosSugeridos');
+            console.log("✅ Autocompletado configurado para destinoInput");
+        }
+
+        // Configurar autocompletado para formulario de editar
+        const editDestinoInput = document.getElementById('editDestino');
         if (editDestinoInput) {
-            console.log("✅ Configurando autocompletado para editDestinoInput");
-            // Tu código de autocompletado aquí
+            // Crear datalist para el modal de edición
+            const editDatalistId = 'editDestinosSugeridos';
+            if (!document.getElementById(editDatalistId)) {
+                const editDatalist = document.createElement('datalist');
+                editDatalist.id = editDatalistId;
+                document.body.appendChild(editDatalist);
+            }
+            editDestinoInput.setAttribute('list', editDatalistId);
+            setupDestinoAutocomplete(editDestinoInput, editDatalistId);
+            console.log("✅ Autocompletado configurado para editDestinoInput");
         }
     });
 </script>
