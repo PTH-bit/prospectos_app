@@ -161,7 +161,7 @@ def calcular_similitud(texto1: str, texto2: str) -> float:
     return similitud
 
 
-def buscar_destino_similar(nombre: str, db: Session, umbral: float = 0.7):
+def buscar_destino_similar(nombre: str, db: Session, umbral: float = 0.7, lista_destinos: List[Destino] = None):
     """
     Busca destinos similares en la base de datos.
     
@@ -169,6 +169,7 @@ def buscar_destino_similar(nombre: str, db: Session, umbral: float = 0.7):
         nombre: Nombre del destino a buscar
         db: Sesión de base de datos
         umbral: Umbral mínimo de similitud (0.0 a 1.0)
+        lista_destinos: Lista opcional de destinos pre-cargados para evitar consultas repetitivas
         
     Returns:
         Tupla (destino_encontrado, similitud) o (None, 0.0) si no hay coincidencias
@@ -178,8 +179,11 @@ def buscar_destino_similar(nombre: str, db: Session, umbral: float = 0.7):
     
     nombre_normalizado = str(nombre).strip().upper()
     
-    # Obtener todos los destinos activos
-    destinos = db.query(Destino).filter(Destino.activo == 1).all()
+    # Obtener todos los destinos activos si no se proporcionan
+    if lista_destinos is not None:
+        destinos = lista_destinos
+    else:
+        destinos = db.query(Destino).filter(Destino.activo == 1).all()
     
     mejor_destino = None
     mejor_similitud = 0.0
@@ -437,6 +441,9 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
             })
             return resultado
         
+        # Obtener todos los destinos activos una sola vez para mejorar rendimiento
+        destinos_activos = db.query(Destino).filter(Destino.activo == 1).all()
+
         # Procesar cada fila
         for index, row in df.iterrows():
             fila_num = index + 2  # +2 porque Excel empieza en 1 y tiene encabezado
@@ -541,7 +548,12 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                         print(f"   ✓ Destino exacto: {destino_nombre}")
                     else:
                         # 2. Buscar por similitud (umbral 70%)
-                        destino_similar, similitud = buscar_destino_similar(destino_nombre, db, umbral=0.7)
+                        destino_similar, similitud = buscar_destino_similar(
+                            destino_nombre,
+                            db,
+                            umbral=0.7,
+                            lista_destinos=destinos_activos
+                        )
                         
                         if destino_similar:
                             # Destino similar encontrado - usar el existente
