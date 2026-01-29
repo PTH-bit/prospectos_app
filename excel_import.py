@@ -444,6 +444,14 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
         # Obtener todos los destinos activos una sola vez para mejorar rendimiento
         destinos_activos = db.query(Destino).filter(Destino.activo == 1).all()
 
+        # Pre-cargar Medios de Ingreso para evitar consultas repetitivas (Optimización)
+        medios_db = db.query(MedioIngreso).all()
+        medios_map = {m.nombre.upper(): m.id for m in medios_db if m.nombre}
+
+        # Pre-cargar Usuarios para evitar consultas repetitivas (Optimización)
+        usuarios_db = db.query(Usuario).all()
+        usuarios_map = {u.username: u.id for u in usuarios_db if u.username}
+
         # Procesar cada fila
         for index, row in df.iterrows():
             fila_num = index + 2  # +2 porque Excel empieza en 1 y tiene encabezado
@@ -601,12 +609,10 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 medio_ingreso_nombre = row.get('medio_ingreso')
                 if not pd.isna(medio_ingreso_nombre):
                     medio_ingreso_nombre = str(medio_ingreso_nombre).strip().upper()
-                    medio = db.query(MedioIngreso).filter(
-                        MedioIngreso.nombre == medio_ingreso_nombre
-                    ).first()
                     
-                    if medio:
-                        medio_ingreso_id = medio.id
+                    # Buscar en mapa pre-cargado
+                    if medio_ingreso_nombre in medios_map:
+                        medio_ingreso_id = medios_map[medio_ingreso_nombre]
                     else:
                         # Crear medio de ingreso si no existe
                         nuevo_medio = MedioIngreso(nombre=medio_ingreso_nombre)
@@ -614,6 +620,8 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                         db.commit()
                         db.refresh(nuevo_medio)
                         medio_ingreso_id = nuevo_medio.id
+                        # Actualizar mapa
+                        medios_map[medio_ingreso_nombre] = medio_ingreso_id
                 
                 # Estado
                 estado = row.get('estado', 'nuevo')
@@ -652,12 +660,10 @@ def importar_prospectos_desde_excel(archivo_path: str, db: Session) -> Dict:
                 agente_username = row.get('agente_asignado')
                 if not pd.isna(agente_username):
                     agente_username = str(agente_username).strip()
-                    agente = db.query(Usuario).filter(
-                        Usuario.username == agente_username
-                    ).first()
                     
-                    if agente:
-                        agente_asignado_id = agente.id
+                    # Buscar en mapa pre-cargado
+                    if agente_username in usuarios_map:
+                        agente_asignado_id = usuarios_map[agente_username]
                     else:
                         resultado['errores'].append({
                             'fila': fila_num,
@@ -852,6 +858,10 @@ def importar_clientes_desde_excel(archivo_path: str, db: Session) -> Dict:
             })
             return resultado
         
+        # Pre-cargar Usuarios para evitar consultas repetitivas (Optimización)
+        usuarios_db = db.query(Usuario).all()
+        usuarios_map = {u.username: u.id for u in usuarios_db if u.username}
+
         # Procesar cada fila
         for index, row in df.iterrows():
             fila_num = index + 2  # +2 porque Excel empieza en 1 y tiene encabezado
@@ -949,12 +959,10 @@ def importar_clientes_desde_excel(archivo_path: str, db: Session) -> Dict:
                 agente_username = row.get('agente_asignado')
                 if not pd.isna(agente_username):
                     agente_username = str(agente_username).strip()
-                    agente = db.query(Usuario).filter(
-                        Usuario.username == agente_username
-                    ).first()
                     
-                    if agente:
-                        agente_asignado_id = agente.id
+                    # Buscar en mapa pre-cargado
+                    if agente_username in usuarios_map:
+                        agente_asignado_id = usuarios_map[agente_username]
                     else:
                         resultado['errores'].append({
                             'fila': fila_num,
