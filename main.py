@@ -1058,9 +1058,10 @@ async def listar_prospectos(
 
     # ✅ APLICAR VALORES POR DEFECTO SI NO HAY ELEMENTOS DE FILTRO ESPECÍFICOS EN LA URL
     # Se considera "filtro activo" si el usuario envió algún parámetro en la URL
-    # Pero para simplificar, si 'estado' y 'agente_asignado_id' son None, aplicamos defaults
+    # ✅ CORREGIDO: Verificar TODOS los filtros, no solo estado y agente
     
-    if estado is None and agente_asignado_id is None:
+    if (estado is None and agente_asignado_id is None and 
+        not busqueda_global and not telefono and not destino and not medio_ingreso_id):
         if user.tipo_usuario == TipoUsuario.AGENTE.value:
             # Agente: Nuevo, Seguimiento, Cotizado
             query = query.filter(models.Prospecto.estado.in_([
@@ -3264,7 +3265,17 @@ async def ver_notificaciones(
         if filtro_estado == "pendientes":
             query = query.filter(models.Notificacion.leida == False)
         elif filtro_estado == "leidas":
-            query = query.filter(models.Notificacion.leida == True)
+            # ✅ CORREGIDO: Incluir tanto leídas como vencidas (notificaciones pasadas)
+            query = query.filter(
+                or_(
+                    models.Notificacion.leida == True,
+                    and_(
+                        models.Notificacion.leida == False,
+                        models.Notificacion.fecha_programada.isnot(None),
+                        models.Notificacion.fecha_programada < datetime.now()
+                    )
+                )
+            )
         elif filtro_estado == "vencidas":
             query = query.filter(
                 models.Notificacion.leida == False,
