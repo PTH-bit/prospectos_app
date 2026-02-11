@@ -8,7 +8,9 @@ import sys
 import os
 
 # Agregar el directorio padre al path para importar módulos
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+sys.path.insert(0, parent_dir)
 
 from sqlalchemy import create_engine, text
 from database import SQLALCHEMY_DATABASE_URL
