@@ -32,147 +32,136 @@
 </div>
 {% endif %}
 
-<!-- Filtros Compactos -->
+<!-- ✅ FILTROS UNIFICADOS - COMPACTO Y ORGANIZADO -->
 <div class="card mb-3 border-0 shadow-sm bg-light">
-    <div class="card-body py-2">
-        <form method="get" action="/prospectos" class="row row-cols-lg-auto g-2 align-items-center">
+    <div class="card-body py-3">
+        <form method="get" action="/prospectos" class="needs-validation" novalidate>
+            
+            <!-- Fila 1: Filtros principales -->
+            <div class="row g-2 mb-2">
+                <!-- Icono de filtro -->
+                <div class="col-auto d-flex align-items-center">
+                    <span class="fw-bold text-primary me-2"><i class="fas fa-filter"></i></span>
+                </div>
 
-            <div class="col-12">
-                <span class="fw-bold text-muted small me-2"><i class="fas fa-filter"></i></span>
+                <!-- Límite de registros -->
+                <div class="col-auto">
+                    <select class="form-select form-select-sm" name="limit" onchange="this.form.submit()"
+                        title="Registros por página" style="width: 70px;">
+                        <option value="10" {% if limit==10 %}selected{% endif %}>10</option>
+                        <option value="20" {% if limit==20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
+                    </select>
+                </div>
+
+                <!-- Búsqueda global -->
+                <div class="col-12 col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0" name="busqueda_global"
+                            value="{{ filtros_activos.busqueda_global or '' }}" placeholder="Buscar...">
+                    </div>
+                </div>
+
+                <!-- Destino -->
+                <div class="col-12 col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="destino"
+                        value="{{ filtros_activos.destino or '' }}" placeholder="🌍 Destino">
+                </div>
+
+                <!-- Teléfono -->
+                <div class="col-12 col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="telefono"
+                        value="{{ filtros_activos.telefono or '' }}" placeholder="📞 Teléfono">
+                </div>
+
+                <!-- Estado -->
+                <div class="col-12 col-md-2">
+                    <select class="form-select form-select-sm" name="estado">
+                        <option value="todos">Estado: Todos</option>
+                        <option value="nuevo" {% if filtros_activos.estado=='nuevo' %}selected{% endif %}>Nuevo</option>
+                        <option value="en_seguimiento" {% if filtros_activos.estado=='en_seguimiento' %}selected{% endif %}>
+                            En Seguimiento</option>
+                        <option value="cotizado" {% if filtros_activos.estado=='cotizado' %}selected{% endif %}>Cotizado
+                        </option>
+                        <option value="cerrado_perdido" {% if filtros_activos.estado=='cerrado_perdido' %}selected{% endif
+                            %}>Cerrado/Perdido</option>
+                        <option value="ganado" {% if filtros_activos.estado=='ganado' %}selected{% endif %}>Venta/Ganado
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Agente (solo para admin/supervisor) -->
+                {% if current_user.tipo_usuario in ['administrador', 'supervisor'] %}
+                <div class="col-12 col-md-2">
+                    <select class="form-select form-select-sm" name="agente_asignado_id">
+                        <option value="todos">Agente: Todos</option>
+                        <option value="sin_asignar" {% if filtros_activos.agente_asignado_id=='sin_asignar' %}selected{%
+                            endif %}>Sin asignar</option>
+                        {% for agente in agentes %}
+                        <option value="{{ agente.id }}" {% if filtros_activos.agente_asignado_id==agente.id|string
+                            %}selected{% endif %}>
+                            {{ agente.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
             </div>
 
-            <!-- SELECTOR DE LÍMITE -->
-            <div class="col-12">
-                <select class="form-select form-select-sm" name="limit" onchange="this.form.submit()"
-                    title="Registros por página" style="max-width: 80px;">
-                    <option value="10" {% if limit==10 %}selected{% endif %}>10</option>
-                    <option value="20" {% if limit==20 %}selected{% endif %}>20</option>
-                    <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
-                    <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
-                </select>
-            </div>
+            <!-- Fila 2: Filtros de fecha -->
+            <div class="row g-2 align-items-center">
+                <!-- Icono de calendario -->
+                <div class="col-auto d-flex align-items-center">
+                    <span class="fw-bold text-primary me-2"><i class="fas fa-calendar-alt"></i></span>
+                </div>
 
-            <!-- BÚSQUEDA GLOBAL -->
-            <div class="col-12">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
-                    <input type="text" class="form-control border-start-0" name="busqueda_global"
-                        value="{{ filtros_activos.busqueda_global or '' }}" placeholder="Buscar...">
+                <!-- Botones de presets -->
+                <div class="col-auto">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary" onclick="filtrarHoy()"
+                            title="Hoy">Hoy</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="filtrarSemana()"
+                            title="Esta Semana">Semana</button>
+                        <button type="button" class="btn btn-secondary" onclick="filtrarMes()" title="Este Mes">Mes</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="filtrarTrimestre()"
+                            title="Trimestre">Trim.</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="filtrarAnio()"
+                            title="Este Año">Año</button>
+                    </div>
+                </div>
+
+                <!-- Fecha inicio -->
+                <div class="col-auto">
+                    <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="fecha_inicio"
+                        value="{{ fecha_inicio }}" title="Fecha inicio" style="width: 145px;">
+                </div>
+
+                <!-- Fecha fin -->
+                <div class="col-auto">
+                    <input type="date" class="form-control form-control-sm" name="fecha_fin" id="fecha_fin"
+                        value="{{ fecha_fin }}" title="Fecha fin" style="width: 145px;">
+                </div>
+
+                <!-- Botones de acción -->
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
+                        <i class="fas fa-filter"></i> Aplicar
+                    </button>
+                    <a href="/prospectos" class="btn btn-outline-secondary btn-sm rounded-circle ms-1" title="Limpiar filtros">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+
+                <!-- Contador de resultados -->
+                <div class="col-auto ms-auto">
+                    <span class="badge bg-white text-dark border px-3 py-2">
+                        <i class="fas fa-list-ol me-1"></i>
+                        {{ prospectos|length }} / {{ total_registros }}
+                    </span>
                 </div>
             </div>
-
-            <div class="col-12">
-                <input type="text" class="form-control form-control-sm" name="destino"
-                    value="{{ filtros_activos.destino or '' }}" placeholder="🌍 Destino...">
-            </div>
-
-            <div class="col-12">
-                <input type="text" class="form-control form-control-sm" name="telefono"
-                    value="{{ filtros_activos.telefono or '' }}" placeholder="📞 Teléfono...">
-            </div>
-
-            <div class="col-12">
-                <select class="form-select form-select-sm" name="estado">
-                    <option value="todos">Estado: Todos</option>
-                    <option value="nuevo" {% if filtros_activos.estado=='nuevo' %}selected{% endif %}>Nuevo</option>
-                    <option value="en_seguimiento" {% if filtros_activos.estado=='en_seguimiento' %}selected{% endif %}>
-                        En Seguimiento</option>
-                    <option value="cotizado" {% if filtros_activos.estado=='cotizado' %}selected{% endif %}>Cotizado
-                    </option>
-                    <option value="cerrado_perdido" {% if filtros_activos.estado=='cerrado_perdido' %}selected{% endif
-                        %}>Cerrado/Perdido</option>
-                    <option value="ganado" {% if filtros_activos.estado=='ganado' %}selected{% endif %}>Venta/Ganado
-                    </option>
-                </select>
-            </div>
-
-            {% if current_user.tipo_usuario in ['administrador', 'supervisor'] %}
-            <div class="col-12">
-                <select class="form-select form-select-sm" name="agente_asignado_id">
-                    <option value="todos">Agente: Todos</option>
-                    <option value="sin_asignar" {% if filtros_activos.agente_asignado_id=='sin_asignar' %}selected{%
-                        endif %}>Sin asignar</option>
-                    {% for agente in agentes %}
-                    <option value="{{ agente.id }}" {% if filtros_activos.agente_asignado_id==agente.id|string
-                        %}selected{% endif %}>
-                        {{ agente.username }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-
-            <div class="col-12">
-                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">Aplicar</button>
-                <a href="/prospectos" class="btn btn-outline-secondary btn-sm rounded-circle" title="Limpiar"><i
-                        class="fas fa-times"></i></a>
-            </div>
-
-            <div class="col-12 ms-auto text-end">
-                <span class="badge bg-white text-dark border">{{ prospectos|length }} / {{ total_registros }}</span>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ✅ FILTROS DE FECHA - COMPACTO -->
-<div class="card mb-3 border-0 shadow-sm bg-light">
-    <div class="card-body py-2">
-        <form method="get" action="/prospectos" id="formFiltroFechas"
-            class="row row-cols-lg-auto g-2 align-items-center">
-            <div class="col-12">
-                <span class="fw-bold text-muted small me-2"><i class="fas fa-calendar-alt"></i></span>
-            </div>
-
-            <!-- Botones de Presets -->
-            <div class="col-12">
-                <div class="btn-group btn-group-sm" role="group">
-                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarHoy()"
-                        title="Hoy">Hoy</button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarSemana()"
-                        title="Esta Semana">Semana</button>
-                    <button type="button" class="btn btn-secondary" onclick="filtrarMes()" title="Este Mes">Mes</button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarTrimestre()"
-                        title="Trimestre">Trim.</button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="filtrarAnio()"
-                        title="Este Año">Año</button>
-                </div>
-            </div>
-
-            <!-- Date Pickers Compactos -->
-            <div class="col-12">
-                <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="fecha_inicio"
-                    value="{{ fecha_inicio }}" title="Fecha inicio" style="max-width: 150px;">
-            </div>
-
-            <div class="col-12">
-                <input type="date" class="form-control form-control-sm" name="fecha_fin" id="fecha_fin"
-                    value="{{ fecha_fin }}" title="Fecha fin" style="max-width: 150px;">
-            </div>
-
-            <div class="col-12">
-                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
-                    <i class="fas fa-filter"></i> Aplicar
-                </button>
-            </div>
-
-            <!-- Mantener otros filtros activos -->
-            {% if filtros_activos.estado and filtros_activos.estado != 'todos' %}
-            <input type="hidden" name="estado" value="{{ filtros_activos.estado }}">
-            {% endif %}
-            {% if filtros_activos.agente_asignado_id and filtros_activos.agente_asignado_id != 'todos' %}
-            <input type="hidden" name="agente_asignado_id" value="{{ filtros_activos.agente_asignado_id }}">
-            {% endif %}
-            {% if filtros_activos.destino %}
-            <input type="hidden" name="destino" value="{{ filtros_activos.destino }}">
-            {% endif %}
-            {% if filtros_activos.telefono %}
-            <input type="hidden" name="telefono" value="{{ filtros_activos.telefono }}">
-            {% endif %}
-            {% if filtros_activos.busqueda_global %}
-            <input type="hidden" name="busqueda_global" value="{{ filtros_activos.busqueda_global }}">
-            {% endif %}
-            <input type="hidden" name="limit" value="{{ limit }}">
         </form>
     </div>
 </div>
